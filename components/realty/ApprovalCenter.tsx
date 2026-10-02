@@ -2,7 +2,7 @@
 import React from 'react';
 import { PurchaseRequisition, PurchaseOrder, User, ApprovalRule, PRStatus, POStatus } from '../../types';
 import { db } from '../../db';
-import { useLiveQuery } from 'dexie-react-hooks';
+import { useLiveQuery } from '../../liveQuery';
 
 interface ApprovalCenterProps {
   currentUser: User;

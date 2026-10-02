@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { db } from '../../db';
-import { useLiveQuery } from 'dexie-react-hooks';
+import { useLiveQuery } from '../../liveQuery';
 import { v4 as uuidv4 } from 'uuid';
 import { CostHeadMasterItem, CostHeadCategory } from '../../types';
 

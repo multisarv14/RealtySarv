@@ -8,87 +8,17 @@ import FinanceSarvContainer from './components/realty/FinanceSarvContainer';
 import SystemSwitcher from './components/SystemSwitcher';
 import { Lead, User, Project, NewUserData, SystemType, PaymentPlan, Budget, ClientProfile, UnitType, LocationSetting, LivingPlace, FormFieldConfig, FinancialSettings, ApplicationSettings, ChannelPartner, NewChannelPartnerData, TaskStatus, LifecycleStage, LeadLifecycleStatus } from './types';
 import { db } from './db';
-import { useLiveQuery } from 'dexie-react-hooks';
+import { useLiveQuery } from './liveQuery';
 import { INITIAL_USERS } from './constants';
 import { v4 as uuidv4 } from 'uuid';
 import InstallationWizard from './components/InstallationWizard';
 import SetupWizard from './components/SetupWizard';
 import AdminPanel from './components/admin/AdminPanel';
-import { auth, fdb } from './firebase';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
-
-const syncEntityToFirestore = async (collectionName: string, item: Record<string, any>) => {
-  try {
-    const id = item?.id || item?.leadId || item?.userId || item?.projectId || item?.companyId || uuidv4();
-    await setDoc(doc(fdb, collectionName, String(id)), {
-      ...item,
-      id: String(id),
-      updatedAt: new Date().toISOString(),
-    });
-  } catch (error) {
-    console.error(`Failed to sync ${collectionName} to Firestore:`, error);
-  }
-};
-
-const createTenantFirestoreSeed = async (
-  companyName: string,
-  subdomain: string,
-  adminData: NewUserData,
-  adminId: string
-) => {
-  const companyId = `company_${Date.now()}`;
-  const projectId = `project_${Date.now()}`;
-  const leadId = `lead_${Date.now()}`;
-  const now = new Date().toISOString();
-
-  const companyDoc = {
-    id: companyId,
-    companyId,
-    name: companyName || 'My RealtySarv Workspace',
-    subdomain: (subdomain || '').toLowerCase(),
-    setupCompleted: false,
-    createdAt: now,
-    updatedAt: now,
-  };
-
-  const projectDoc = {
-    id: projectId,
-    projectId,
-    companyId,
-    name: `${companyName || 'My RealtySarv Workspace'} Project`,
-    projectStatus: 'Draft',
-    createdAt: now,
-    updatedAt: now,
-  };
-
-  const leadDoc = {
-    id: leadId,
-    leadId,
-    companyId,
-    ownerId: adminId,
-    name: adminData.name || 'New Lead',
-    leadStatus: 'New',
-    createdAt: now,
-    updatedAt: now,
-  };
-
-  await Promise.all([
-    setDoc(doc(fdb, 'companies', companyId), companyDoc),
-    setDoc(doc(fdb, 'users', adminId), {
-      id: adminId,
-      companyId,
-      email: (adminData.email || '').trim().toLowerCase(),
-      name: adminData.name || 'Workspace Admin',
-      role: 'Admin',
-      isActive: true,
-      createdAt: now,
-      updatedAt: now,
-    }),
-    setDoc(doc(fdb, 'projects', projectId), projectDoc),
-    setDoc(doc(fdb, 'leads', leadId), leadDoc),
-  ]);
-};
+import { tenantApi, getToken, setToken, onUnauthorized, authApi } from './httpClient';
+import { currentTenant, tenantUrl, mainSiteUrl } from './tenant';
+import WorkspaceFinder from './components/WorkspaceFinder';
+import { PlanId } from './plans';
+import { notifyAll } from './liveQuery';
 
 const getInitialTheme = (): string => {
   try {
@@ -112,17 +42,20 @@ const App: React.FC = () => {
   const [activeSystem, setActiveSystem] = React.useState<SystemType>(() => {
     return (localStorage.getItem('lastActiveSystem') as SystemType) || 'LeadSarv';
   });
-  const [isInstalled, setIsInstalled] = React.useState<boolean>(() => localStorage.getItem('isRealtySarvInstalled') === 'true');
   const [showInstallationWizard, setShowInstallationWizard] = React.useState<boolean>(false);
+  const [wizardPlan, setWizardPlan] = React.useState<PlanId | undefined>(undefined);
 
   // viewState controls exactly what the user sees: the marketing landing page, the sign-in screen, or the app itself
-  const [viewState, setViewState] = React.useState<'landing' | 'login' | 'authenticated'>('landing');
+  // On a company address (acme.realtysarv.com) clients land on their own sign-in page; the main site shows the landing page.
+  const tenant = React.useMemo(currentTenant, []);
+  const [viewState, setViewState] = React.useState<'landing' | 'login' | 'authenticated'>(() => (tenant || window.location.hash === '#find' ? 'login' : 'landing'));
 
   const [currentUser, setCurrentUser] = React.useState<User | null>(null);
   const [themeColor, setThemeColorState] = React.useState<string>(getInitialTheme);
   const [themeMode, setThemeModeState] = React.useState<'light' | 'dark'>(getInitialThemeMode);
   const [currentAppView, setCurrentAppView] = React.useState<'main' | 'admin'>('main');
   const [dbError, setDbError] = React.useState<string | null>(null);
+  const [restoringSession, setRestoringSession] = React.useState<boolean>(() => !!getToken() || window.location.hash.startsWith('#handoff='));
 
   const leads = useLiveQuery(() => db.leads.toArray(), []);
   const users = useLiveQuery(() => db.users.toArray(), []);
@@ -155,19 +88,29 @@ const App: React.FC = () => {
   React.useEffect(() => {
     (db as any).open().catch((err: any) => {
       console.error("Failed to open database:", err);
-      setDbError("Local Database (IndexedDB) connection failed. Please ensure your browser supports storage and try refreshing.");
+      setDbError("Cannot reach the RealtySarv server. Please make sure the API and MongoDB are running, then retry.");
     });
   }, []);
 
+  // Resume an existing session, and drop back to the landing page if the token stops working.
   React.useEffect(() => {
-    const seedUsers = async () => {
-      if (users !== undefined && users.length === 0) {
-        const count = await db.users.count();
-        if (count === 0) await db.users.bulkAdd(INITIAL_USERS);
-      }
-    };
-    seedUsers();
-  }, [users]);
+    // Arriving from the install wizard: the fragment holds a short-lived pass that signs the new owner straight in.
+    const hash = window.location.hash;
+    if (hash.startsWith('#handoff=')) {
+      const pass = hash.slice('#handoff='.length);
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+      authApi.exchange(pass)
+        .then(({ token, user }) => { setToken(token); setCurrentUser(user); setViewState('authenticated'); notifyAll(); })
+        .catch(() => { /* expired: they simply sign in on the login page */ })
+        .finally(() => setRestoringSession(false));
+    } else if (getToken()) {
+      authApi.me()
+        .then(({ user }: any) => { setCurrentUser(user); setViewState('authenticated'); notifyAll(); })
+        .catch(() => setToken(''))
+        .finally(() => setRestoringSession(false));
+    }
+    return onUnauthorized(() => { setViewState(tenant ? 'login' : 'landing'); setCurrentUser(null); setCurrentAppView('main'); });
+  }, []);
 
   React.useEffect(() => {
     const body = document.body;
@@ -198,79 +141,16 @@ const App: React.FC = () => {
     plan: string,
     modules: { crm: boolean; erp: boolean },
     subdomain: string
-  ) => {
+  ): Promise<string> => {
     const normalizedEmail = (adminData.email || '').trim().toLowerCase();
-    const password = adminData.password || '';
+    if (!normalizedEmail || !(adminData.password || '')) throw new Error('Please provide a valid email and password for the workspace administrator.');
 
-    if (!normalizedEmail || !password) {
-      window.alert('Please provide a valid email and password for the workspace administrator.');
-      return;
-    }
-
-    let firebaseUserId = '';
     try {
-      console.log('Creating Firebase Auth user for onboarding:', normalizedEmail);
-      const authResult = await createUserWithEmailAndPassword(auth, normalizedEmail, password).catch(async (error: any) => {
-        if (error?.code === 'auth/email-already-in-use') {
-          console.log('Firebase Auth email already exists; signing in instead:', normalizedEmail);
-          const signInResult = await signInWithEmailAndPassword(auth, normalizedEmail, password);
-          return signInResult;
-        }
-        throw error;
-      });
-      firebaseUserId = authResult.user.uid;
-      console.log('Firebase Auth user ready:', firebaseUserId);
+      const { subdomain: created, handoff } = await tenantApi.create({ admin: { ...adminData, email: normalizedEmail }, companyName, subdomain, plan });
+      return tenantUrl(created, handoff);
     } catch (error: any) {
-      console.error('Failed to create Firebase Auth user:', error);
-      window.alert(`Unable to create the Firebase account for ${normalizedEmail}. Please check your network or Firebase configuration and try again.`);
-      return;
+      throw new Error(error?.status ? error.message : 'Can’t reach the server. Check your connection and try again.');
     }
-
-    // 1. Purge all operational transactional tables for a clean new tenant workspace
-    await db.users.clear();
-    await db.leads.clear();
-    await db.projects.clear();
-    await db.channelPartners.clear();
-    await db.vendors.clear();
-    await db.purchaseRequisitions.clear();
-    await db.purchaseOrders.clear();
-    await db.workOrders.clear();
-    await db.materialStock.clear();
-    await db.dailyProgressReports.clear();
-    await db.projectPhases.clear();
-    await db.costBudgets.clear();
-    await db.boqs.clear();
-    await db.boqItems.clear();
-    await db.vouchers.clear();
-    await db.gstEntries.clear();
-
-    // 2. Add root Admin Account locally and in Firestore
-    const newAdmin: User = { id: firebaseUserId || uuidv4(), ...adminData, email: normalizedEmail, role: 'Admin', isActive: true, assignedProjectIds: [] };
-    await db.users.add(newAdmin);
-
-    try {
-      await createTenantFirestoreSeed(companyName, subdomain, adminData, newAdmin.id);
-      console.log('Firestore tenant seed created for:', newAdmin.id);
-    } catch (firestoreError: any) {
-      console.error('Failed to write tenant seed to Firestore:', firestoreError);
-    }
-
-    // 3. Setup the Company Profile with setupCompleted: false so SetupWizard loads on login
-    await db.companyProfile.clear();
-    await db.companyProfile.add({
-      name: companyName || "My RealtySarv Workspace",
-      address: "123 Business Avenue",
-      phone: adminData.phone || "",
-      website: "",
-      setupCompleted: false,
-      customData: { subdomain: (subdomain || "").toLowerCase() }
-    });
-
-    localStorage.setItem('realtySarvActiveSubdomain', (subdomain || "").toLowerCase());
-    setIsInstalled(true);
-    localStorage.setItem('isRealtySarvInstalled', 'true');
-    setShowInstallationWizard(false);
-    setViewState('login');
   };
 
   const handleLoginSuccess = (user: User) => {
@@ -280,21 +160,19 @@ const App: React.FC = () => {
 
   const handleLeadsUpdate = async (updatedLeads: Lead[]) => {
     await db.leads.bulkPut(updatedLeads);
-    await Promise.all(updatedLeads.map((lead) => syncEntityToFirestore('leads', lead)));
   };
 
   const handleUsersUpdate = async (updatedUsers: User[]) => {
     await db.users.bulkPut(updatedUsers);
-    await Promise.all(updatedUsers.map((user) => syncEntityToFirestore('users', user)));
   };
 
   const handleProjectsUpdate = async (updatedProjects: Project[]) => {
     await db.projects.bulkPut(updatedProjects);
-    await Promise.all(updatedProjects.map((project) => syncEntityToFirestore('projects', project)));
   };
 
   const handleLogout = () => {
-    setViewState('landing');
+    setToken('');
+    setViewState(tenant ? 'login' : 'landing');
     setCurrentUser(null);
     setCurrentAppView('main');
   };
@@ -310,7 +188,33 @@ const App: React.FC = () => {
     );
   }
 
-  if (showInstallationWizard) return <InstallationWizard onComplete={handleInstallComplete} onGoToLogin={() => setShowInstallationWizard(false)} />;
+  if (restoringSession) return <div className="flex h-screen w-screen justify-center items-center bg-[var(--dark-bg)] text-white">Loading...</div>;
+
+  if (showInstallationWizard) return <InstallationWizard onComplete={handleInstallComplete} onGoToLogin={() => setShowInstallationWizard(false)} initialPlan={wizardPlan} />;
+
+  if (viewState !== 'authenticated') {
+    return (
+      <div className="app-container relative flex flex-col h-screen w-screen bg-[var(--dark-bg)] overflow-hidden">
+        <div className="flex-1 overflow-hidden relative">
+          {viewState === 'login' ? (
+            tenant ? (
+              <LoginPage
+                onLoginSuccess={handleLoginSuccess}
+                onGoToInstall={() => { window.location.href = mainSiteUrl(); }}
+              />
+            ) : (
+              <WorkspaceFinder
+                onGoToInstall={() => setShowInstallationWizard(true)}
+                onBackToLanding={() => { window.history.replaceState(null, '', window.location.pathname); setViewState('landing'); }}
+              />
+            )
+          ) : (
+            <LandingPage onSignInClick={() => setViewState('login')} onStartFreeClick={(plan) => { setWizardPlan(plan); setShowInstallationWizard(true); }} />
+          )}
+        </div>
+      </div>
+    );
+  }
 
   if (
     leads === undefined || users === undefined || projects === undefined || sources === undefined || templates === undefined || paymentPlans === undefined ||
@@ -319,7 +223,7 @@ const App: React.FC = () => {
     agreementStatusTypes === undefined || possessionStatusTypes === undefined || inventoryStatusTypes === undefined || projectTypeTypes === undefined ||
     projectStatusTypes === undefined || userRoleSettings === undefined || userDesignations === undefined || companyProfile === undefined || financialSettings === undefined || applicationSettings === undefined || channelPartners === undefined || formFieldConfigs === undefined
   ) {
-    return <div className="flex h-screen w-screen justify-center items-center bg-[var(--dark-bg)] text-white">Connecting to database...</div>;
+    return <div className="flex h-screen w-screen justify-center items-center bg-[var(--dark-bg)] text-white">Loading your workspace...</div>;
   }
 
   const showSetupWizard = viewState === 'authenticated' && currentUser?.role === 'Admin' && companyProfile && !companyProfile.setupCompleted;
@@ -408,7 +312,7 @@ const App: React.FC = () => {
       )}
 
       <div className="flex-1 overflow-hidden relative">
-        {viewState === 'authenticated' ? (
+        {(
           showSetupWizard ? (
             <SetupWizard
               user={currentUser!}
@@ -425,20 +329,6 @@ const App: React.FC = () => {
               sources={sources}
             />
           ) : renderActiveSystem()
-        ) : viewState === 'login' ? (
-          <LoginPage
-            onLoginSuccess={handleLoginSuccess}
-            onGoToInstall={() => setShowInstallationWizard(true)}
-            isInstalled={isInstalled}
-            users={users || []}
-            companyProfile={companyProfile}
-            onBackToLanding={() => setViewState('landing')}
-          />
-        ) : (
-          <LandingPage
-            onSignInClick={() => setViewState('login')}
-            onStartFreeClick={() => setShowInstallationWizard(true)}
-          />
         )}
       </div>
     </div>

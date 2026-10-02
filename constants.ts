@@ -43,7 +43,6 @@ export const ADMIN_PANEL_SECTIONS: AdminPanelSectionConfig[] = [
         { id: 'storage', label: 'Document Storage', icon: 'fas fa-hdd' },
         { id: 'marketing', label: 'Marketing & Auto.', icon: 'fas fa-bullhorn' },
         { id: 'custom', label: 'Custom Integrations', icon: 'fas fa-code' },
-        { id: 'firebase-sync', label: 'Firebase Cloud Sync', icon: 'fas fa-cloud-upload-alt' },
         { id: 'email', label: 'Email', icon: 'fas fa-envelope' },
         { id: 'templates', label: 'Templates', icon: 'fas fa-file-alt' },
         { id: 'meta', label: 'Meta (Facebook)', icon: 'fab fa-facebook' },

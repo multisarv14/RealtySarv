@@ -1,8 +1,10 @@
 import React from 'react';
+import { PLANS, PlanId } from '../plans';
 
 interface LandingPageProps {
   onSignInClick: () => void;
-  onStartFreeClick: () => void;
+  /** Opens the install wizard, optionally with a plan already chosen. */
+  onStartFreeClick: (plan?: PlanId) => void;
 }
 
 type PageType = 'home' | 'docs' | 'support';
@@ -17,57 +19,54 @@ const LandingPage: React.FC<LandingPageProps> = ({ onSignInClick, onStartFreeCli
     { label: 'Overview', id: 'overview' },
     { label: 'Capabilities', id: 'solutions' },
     { label: 'LeadSarv CRM', id: 'crm-detail' },
+    { label: 'ProjectSarv ERP', id: 'products' },
     { label: 'FinanceSarv', id: 'finance-detail' },
     { label: 'Pricing', id: 'pricing' },
   ];
 
-  React.useEffect(() => {
-    const handleScroll = () => {
-      setScrolled(window.scrollY > 20);
+  const scrollerRef = React.useRef<HTMLDivElement>(null);
+  const [menuOpen, setMenuOpen] = React.useState(false);
 
-      // Track active section based on scroll position
-      const scrollPosition = window.scrollY + 120;
-      for (const item of subNavItems) {
-        const element = document.getElementById(item.id);
-        if (element) {
-          const { offsetTop, offsetHeight } = element;
-          if (scrollPosition >= offsetTop && scrollPosition < offsetTop + offsetHeight) {
-            setActiveSection(item.label);
-          }
-        }
-      }
-    };
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, [subNavItems]);
-
-  const scrollToSection = (id: string, label: string) => {
-    if (currentPage !== 'home') {
-      setCurrentPage('home');
-      setTimeout(() => {
-        const element = document.getElementById(id);
-        if (element) {
-          window.scrollTo({
-            top: element.offsetTop - 112,
-            behavior: 'smooth'
-          });
-          setActiveSection(label);
-        }
-      }, 50);
-    } else {
-      const element = document.getElementById(id);
-      if (element) {
-        window.scrollTo({
-          top: element.offsetTop - 112,
-          behavior: 'smooth'
-        });
-        setActiveSection(label);
-      }
-    }
+  // Offset of an element from the top of the scroll container's content.
+  const offsetInScroller = (el: HTMLElement) => {
+    const scroller = scrollerRef.current!;
+    return el.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
   };
 
+  React.useEffect(() => {
+    const scroller = scrollerRef.current;
+    if (!scroller || currentPage !== 'home') return;
+    const handleScroll = () => {
+      setScrolled(scroller.scrollTop > 20);
+      // Scroll-spy: the last section whose top has passed the sticky bars is the active one.
+      const line = scroller.scrollTop + 130;
+      let current = subNavItems[0].label;
+      for (const item of subNavItems) {
+        const el = document.getElementById(item.id);
+        if (el && offsetInScroller(el) <= line) current = item.label;
+      }
+      setActiveSection(current);
+    };
+    handleScroll();
+    scroller.addEventListener('scroll', handleScroll, { passive: true });
+    return () => scroller.removeEventListener('scroll', handleScroll);
+  }, [currentPage]);
+
+  const scrollToSection = (id: string, label: string) => {
+    setMenuOpen(false);
+    const go = () => {
+      const el = document.getElementById(id);
+      if (!el || !scrollerRef.current) return;
+      scrollerRef.current.scrollTo({ top: Math.max(0, offsetInScroller(el) - 112), behavior: 'smooth' });
+      setActiveSection(label);
+    };
+    if (currentPage !== 'home') { setCurrentPage('home'); setTimeout(go, 50); } else go();
+  };
+
+  const openDocs = () => { setMenuOpen(false); setCurrentPage('docs'); scrollerRef.current?.scrollTo({ top: 0 }); };
+
   return (
-    <div className="w-full h-full bg-white font-sans text-[#202124] selection:bg-[#e8f0fe] selection:text-[#1a73e8] overflow-y-auto custom-scrollbar scroll-smooth">
+    <div ref={scrollerRef} className="w-full h-full bg-white font-sans text-[#202124] selection:bg-[#e8f0fe] selection:text-[#1a73e8] overflow-y-auto custom-scrollbar">
       {/* Global Header */}
       <header className={`fixed top-0 left-0 right-0 z-[110] transition-all duration-300 ${scrolled ? 'bg-white shadow-sm h-14' : 'bg-white h-16 border-b border-[#dadce0]'}`}>
         <div className="max-w-[1440px] mx-auto px-6 h-full flex items-center justify-between">
@@ -85,15 +84,27 @@ const LandingPage: React.FC<LandingPageProps> = ({ onSignInClick, onStartFreeCli
               <button onClick={() => scrollToSection('crm-detail', 'LeadSarv CRM')} className="hover:text-[#1a73e8] transition-colors">CRM</button>
               <button onClick={() => scrollToSection('finance-detail', 'FinanceSarv')} className="hover:text-[#1a73e8] transition-colors">Accounting</button>
               <button onClick={() => scrollToSection('pricing', 'Pricing')} className="hover:text-[#1a73e8] transition-colors">Pricing</button>
-              <button onClick={() => setCurrentPage('docs')} className={`transition-colors ${currentPage === 'docs' ? 'text-[#1a73e8]' : 'hover:text-[#1a73e8]'}`}>Docs</button>
+              <button onClick={openDocs} className={`transition-colors ${currentPage === 'docs' ? 'text-[#1a73e8]' : 'hover:text-[#1a73e8]'}`}>Docs</button>
             </nav>
           </div>
           
           <div className="flex items-center gap-3">
-            <button onClick={onSignInClick} className="hidden sm:block text-sm font-bold text-[#1a73e8] hover:bg-blue-50 px-4 py-2 rounded transition-colors">Sign in</button>
-            <button onClick={onStartFreeClick} className="bg-[#1a73e8] text-white px-5 py-2 rounded font-bold text-sm shadow-sm hover:shadow-md hover:bg-[#174ea6] transition-all active:scale-95">Get started for free</button>
+            <button onClick={onSignInClick} className="text-sm font-bold text-[#1a73e8] hover:bg-blue-50 px-3 sm:px-4 min-h-10 rounded transition-colors">Sign in</button>
+            <button onClick={() => onStartFreeClick()} className="hidden sm:block bg-[#1a73e8] text-white px-5 min-h-10 rounded font-bold text-sm shadow-sm hover:shadow-md hover:bg-[#174ea6] transition-all active:scale-95">Get started for free</button>
+            <button onClick={() => setMenuOpen((v) => !v)} aria-label={menuOpen ? 'Close menu' : 'Open menu'} aria-expanded={menuOpen} className="lg:hidden w-10 h-10 flex items-center justify-center rounded text-[#5f6368] hover:bg-gray-100">
+              <i className={`fas ${menuOpen ? 'fa-xmark' : 'fa-bars'}`} aria-hidden="true"></i>
+            </button>
           </div>
         </div>
+        {menuOpen && (
+          <nav className="lg:hidden absolute top-full left-0 right-0 bg-white border-b border-[#dadce0] shadow-lg px-6 py-3 flex flex-col text-[15px] font-medium text-[#202124]">
+            <button onClick={() => scrollToSection('crm-detail', 'LeadSarv CRM')} className="text-left min-h-12 border-b border-[#f1f3f4]">CRM</button>
+            <button onClick={() => scrollToSection('finance-detail', 'FinanceSarv')} className="text-left min-h-12 border-b border-[#f1f3f4]">Accounting</button>
+            <button onClick={() => scrollToSection('pricing', 'Pricing')} className="text-left min-h-12 border-b border-[#f1f3f4]">Pricing</button>
+            <button onClick={openDocs} className="text-left min-h-12 border-b border-[#f1f3f4]">Docs</button>
+            <button onClick={() => { setMenuOpen(false); onStartFreeClick(); }} className="mt-3 mb-1 bg-[#1a73e8] text-white min-h-12 rounded font-bold text-sm">Get started for free</button>
+          </nav>
+        )}
       </header>
 
       {/* Sub-Navigation Bar */}
@@ -129,37 +140,48 @@ const LandingPage: React.FC<LandingPageProps> = ({ onSignInClick, onStartFreeCli
                         The real estate <br className="hidden md:block" /> cockpit for leaders
                     </h1>
                     <p className="text-xl text-[#5f6368] mb-10 leading-relaxed font-light">
-                        From the first lead click to the final balance sheet. RealitySarv integrates CRM, ERP, and Finance into one compliant ecosystem.
+                        From the first lead click to the final balance sheet. RealtySarv integrates CRM, ERP, and Finance into one compliant ecosystem.
                     </p>
                     <div className="flex flex-col sm:flex-row items-center gap-4">
-                        <button onClick={onStartFreeClick} className="w-full sm:w-auto bg-[#1a73e8] text-white px-8 py-3.5 rounded font-bold text-sm shadow-lg shadow-blue-500/20 hover:bg-[#174ea6] transition-all transform active:scale-95">Start for free</button>
+                        <button onClick={() => onStartFreeClick()} className="w-full sm:w-auto bg-[#1a73e8] text-white px-8 py-3.5 rounded font-bold text-sm shadow-lg shadow-blue-500/20 hover:bg-[#174ea6] transition-all transform active:scale-95">Start for free</button>
                         <button onClick={() => scrollToSection('solutions', 'Capabilities')} className="w-full sm:w-auto px-8 py-3.5 rounded border border-[#dadce0] font-bold text-sm bg-white hover:bg-gray-50 transition-all">Explore Platform</button>
                     </div>
                 </div>
                 
-                <div className="relative">
-                    <div className="bg-white rounded-2xl border border-[#dadce0] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.08)] transform perspective-1000 rotate-y-[-5deg]">
-                        <div className="bg-[#f1f3f4] rounded-xl aspect-[4/3] flex flex-col p-6 overflow-hidden">
-                            <div className="flex items-center justify-between mb-8">
-                                <div className="flex gap-2">
-                                    <div className="w-3 h-3 rounded-full bg-[#ea4335]"></div>
-                                    <div className="w-3 h-3 rounded-full bg-[#fbbc04]"></div>
-                                    <div className="w-3 h-3 rounded-full bg-[#34a853]"></div>
+                <div className="relative" aria-hidden="true">
+                    <div className="bg-white rounded-2xl border border-[#dadce0] p-3 sm:p-4 shadow-[0_20px_50px_rgba(0,0,0,0.08)]">
+                        <div className="bg-[#f8f9fa] rounded-xl p-4 sm:p-5 overflow-hidden">
+                            <div className="flex items-center justify-between mb-4">
+                                <div className="flex gap-1.5">
+                                    <span className="w-2.5 h-2.5 rounded-full bg-[#ea4335]"></span>
+                                    <span className="w-2.5 h-2.5 rounded-full bg-[#fbbc04]"></span>
+                                    <span className="w-2.5 h-2.5 rounded-full bg-[#34a853]"></span>
                                 </div>
-                                <div className="flex gap-2">
-                                    <div className="w-16 h-2 bg-blue-500 rounded-full"></div>
-                                    <div className="w-16 h-2 bg-green-500 rounded-full"></div>
-                                    <div className="w-16 h-2 bg-indigo-500 rounded-full"></div>
+                                <span className="text-[10px] font-bold uppercase tracking-widest text-[#5f6368]">Sales overview · sample data</span>
+                            </div>
+                            <div className="grid grid-cols-3 gap-2.5 sm:gap-3 mb-3">
+                                {[['Active leads', '248', '#1a73e8'], ['Site visits', '36', '#1e8e3e'], ['Bookings', '12', '#4f46e5']].map(([label, value, color]) => (
+                                    <div key={label} className="bg-white rounded-lg border border-black/5 shadow-sm p-3">
+                                        <p className="text-[10px] text-[#5f6368] font-medium">{label}</p>
+                                        <p className="text-xl sm:text-2xl font-bold mt-0.5" style={{ color }}>{value}</p>
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="bg-white rounded-lg border border-black/5 shadow-sm p-3 mb-3">
+                                <p className="text-[10px] text-[#5f6368] font-medium mb-2">Leads this week</p>
+                                <div className="flex items-end gap-2 h-16">
+                                    {[40, 62, 48, 80, 66, 92, 74].map((h, i) => (
+                                        <div key={i} className="flex-1 rounded-t bg-[#1a73e8]/80" style={{ height: `${h}%` }}></div>
+                                    ))}
                                 </div>
                             </div>
-                            <div className="space-y-4">
-                                <div className="w-full h-12 bg-white rounded-lg shadow-sm border border-black/5 animate-pulse"></div>
-                                <div className="grid grid-cols-3 gap-4">
-                                    <div className="h-24 bg-white rounded-lg shadow-sm border border-black/5 animate-pulse delay-75"></div>
-                                    <div className="h-24 bg-white rounded-lg shadow-sm border border-black/5 animate-pulse delay-150"></div>
-                                    <div className="h-24 bg-white rounded-lg shadow-sm border border-black/5 animate-pulse delay-200"></div>
-                                </div>
-                                <div className="w-2/3 h-4 bg-white/50 rounded"></div>
+                            <div className="bg-white rounded-lg border border-black/5 shadow-sm divide-y divide-[#f1f3f4]">
+                                {[['Aarav Mehta', 'Site visit', 'bg-[#e6f4ea] text-[#1e8e3e]'], ['Neha Kulkarni', 'Qualified', 'bg-[#e8f0fe] text-[#1a73e8]'], ['Rohan Desai', 'Token paid', 'bg-[#fef7e0] text-[#b06000]']].map(([n, st, cls]) => (
+                                    <div key={n} className="flex items-center justify-between px-3 py-2">
+                                        <span className="text-xs font-medium text-[#202124]">{n}</span>
+                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${cls}`}>{st}</span>
+                                    </div>
+                                ))}
                             </div>
                         </div>
                     </div>
@@ -179,7 +201,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onSignInClick, onStartFreeCli
               <div className="grid md:grid-cols-3 gap-8">
                   <FeatureCard 
                     title="LeadSarv CRM" 
-                    desc="Omnichannel lead capture, AI nurturing, and RERA-compliant booking engine for sales teams."
+                    desc="Lead capture, follow-up tasks, site visits, and RERA-ready booking documents for sales teams."
                     icon="fas fa-users-rays"
                     color="#1e8e3e"
                     bgColor="bg-[#e6f4ea]"
@@ -191,11 +213,11 @@ const LandingPage: React.FC<LandingPageProps> = ({ onSignInClick, onStartFreeCli
                     icon="fas fa-hard-hat"
                     color="#1a73e8"
                     bgColor="bg-[#e8f0fe]"
-                    onClick={() => scrollToSection('products', 'Core Modules')}
+                    onClick={() => scrollToSection('products', 'ProjectSarv ERP')}
                   />
                   <FeatureCard 
                     title="FinanceSarv" 
-                    desc="Automated GST returns, TDS filing, and General Ledger with seamless Tally integration."
+                    desc="General ledger, GST and TDS reports, and Tally integration for your accounts team."
                     icon="fas fa-coins"
                     color="#4f46e5"
                     bgColor="bg-[#f5f3ff]"
@@ -215,15 +237,13 @@ const LandingPage: React.FC<LandingPageProps> = ({ onSignInClick, onStartFreeCli
                         </div>
                         <h2 className="text-4xl font-medium text-[#202124] mb-8">LeadSarv CRM: <br /> From Prospect to Possession</h2>
                         <div className="space-y-8">
-                            <FeatureListItem icon="fas fa-magnet" title="Omnichannel Ingestion" desc="Automatically sync leads from Facebook, MagicBricks, 99Acres, and your website into one unified inbox." />
-                            <FeatureListItem icon="fas fa-route" title="Lifecycle Tracking" desc="Monitor leads through custom pipeline stages: Qualified, Site Visit, Token Paid, and Confirmed Booking." />
-                            <FeatureListItem icon="fas fa-file-invoice" title="Booking Engine" desc="Generate RERA-compliant booking forms, allotment letters, and payment receipts with one click." />
+                            <FeatureListItem icon="fas fa-magnet" title="Every lead in one place" desc="Bring leads from Facebook Lead Ads, property portals (99acres, MagicBricks, Housing.com) and your website into one inbox. Set up each source in Admin → Integrations." />
+                            <FeatureListItem icon="fas fa-route" title="Lifecycle Tracking" desc="Move leads through your own pipeline stages, from Qualified and Site Visit to Token Paid and Confirmed Booking, with follow-up tasks for your team." />
+                            <FeatureListItem icon="fas fa-file-invoice" title="Booking documents" desc="Generate RERA-ready booking forms, allotment letters and payment receipts from the booking record." />
                         </div>
-                        <button onClick={onStartFreeClick} className="mt-12 bg-[#1e8e3e] text-white px-8 py-3 rounded font-bold text-sm shadow-lg hover:bg-[#1b7a35] transition-all">Start 14-Day CRM Trial</button>
+                        <button onClick={() => onStartFreeClick()} className="mt-12 bg-[#1e8e3e] text-white px-8 py-3 rounded font-bold text-sm shadow-lg hover:bg-[#1b7a35] transition-all">Start free</button>
                     </div>
-                    <div className="order-1 lg:order-2 bg-white p-2 rounded-3xl shadow-2xl border border-green-200/50">
-                        <img src="https://images.unsplash.com/photo-1552664730-d307ca884978?auto=format&fit=crop&q=80&w=1200" alt="CRM Interface" className="rounded-2xl w-full h-auto" />
-                    </div>
+                    <div className="order-1 lg:order-2" aria-hidden="true"><PipelineMock /></div>
                 </div>
              </div>
           </section>
@@ -233,7 +253,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onSignInClick, onStartFreeCli
             <div className="max-w-[1440px] mx-auto px-6">
                 <div className="grid lg:grid-cols-2 gap-20 items-center">
                     <div>
-                        <img src="https://images.unsplash.com/photo-1503387762-592dee58c460?auto=format&fit=crop&q=80&w=1200" alt="ERP Platform" className="rounded-3xl shadow-2xl border border-[#dadce0]" />
+                        <div aria-hidden="true"><ProcurementMock /></div>
                     </div>
                     <div>
                         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-100 text-[#1a73e8] text-[10px] font-bold uppercase tracking-wider mb-6">
@@ -242,8 +262,8 @@ const LandingPage: React.FC<LandingPageProps> = ({ onSignInClick, onStartFreeCli
                         <h2 className="text-4xl font-medium text-[#202124] mb-8">ProjectSarv ERP: <br /> Precision Logistics</h2>
                         <div className="space-y-8">
                             <FeatureListItem icon="fas fa-chart-pie" title="BOQ-Based Planning" desc="Define granular bill of quantities for materials and services before work begins." />
-                            <FeatureListItem icon="fas fa-receipt" title="Automated PR/PO Workflow" desc="Streamline site indents and procurement with multi-stage approval matrices." />
-                            <FeatureListItem icon="fas fa-boxes-stacked" title="Store Inventory Tracking" desc="Monitor stock levels in real-time with automatic GRN and low-stock alerts." />
+                            <FeatureListItem icon="fas fa-receipt" title="Automated PR/PO Workflow" desc="Run site indents and purchase orders through approval rules based on amount." />
+                            <FeatureListItem icon="fas fa-boxes-stacked" title="Store Inventory Tracking" desc="Track material stock against minimum levels, with goods receipts recorded against purchase orders." />
                         </div>
                     </div>
                 </div>
@@ -261,15 +281,15 @@ const LandingPage: React.FC<LandingPageProps> = ({ onSignInClick, onStartFreeCli
                         <h2 className="text-4xl font-medium text-[#202124] mb-8">FinanceSarv: <br /> Institutional-Grade Accounting</h2>
                         <div className="space-y-8">
                             <FeatureListItem icon="fas fa-book" title="General Ledger" desc="Double-entry accounting built for complex project-level financials and inter-company transactions." />
-                            <FeatureListItem icon="fas fa-shield-halved" title="GST & TDS Filing" desc="Automated computation of GSTR-1, 3B, and TDS reports with integrated validation." />
-                            <FeatureListItem icon="fas fa-sync" title="ERP ↔ Tally Bridge" desc="Native sync with Tally Prime/ERP 9 for seamless data exchange with your external auditors." />
+                            <FeatureListItem icon="fas fa-shield-halved" title="GST & TDS reports" desc="GSTR-1 sales report and TDS tracking, prepared from your vouchers and ready for your filing." />
+                            <FeatureListItem icon="fas fa-sync" title="Tally integration" desc="Set up the Tally connection in Admin → Accounting to share ledger data with your auditors." />
                         </div>
-                        <button onClick={() => scrollToSection('pricing', 'Pricing')} className="mt-12 border-2 border-[#4f46e5] text-[#4f46e5] px-8 py-3 rounded font-bold text-sm hover:bg-indigo-50 transition-all">Explore Financial Modules</button>
+                        <button onClick={() => scrollToSection('pricing', 'Pricing')} className="mt-12 border-2 border-[#4f46e5] text-[#4f46e5] px-8 py-3 rounded font-bold text-sm hover:bg-indigo-50 transition-all">See pricing</button>
                     </div>
                     <div className="bg-white p-8 rounded-3xl shadow-xl border border-indigo-100">
                         <div className="space-y-6">
                              <div className="flex justify-between items-center pb-4 border-b border-gray-100">
-                                 <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">GSTR-1 PROVISIONAL REPORT</span>
+                                 <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">GSTR-1 REPORT · SAMPLE DATA</span>
                                  <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-1 rounded">READY</span>
                              </div>
                              <div className="grid grid-cols-2 gap-6">
@@ -295,36 +315,26 @@ const LandingPage: React.FC<LandingPageProps> = ({ onSignInClick, onStartFreeCli
               <p className="text-lg text-[#5f6368] mb-16 max-w-2xl mx-auto">Scalable plans for growing developers. All statutory updates included.</p>
               
               <div className="grid md:grid-cols-2 max-w-4xl mx-auto gap-8 text-left">
-                  <div className="p-10 rounded-3xl border border-[#dadce0] hover:shadow-xl transition-all flex flex-col">
-                      <h3 className="text-2xl font-bold text-[#202124] mb-2">Growth Hub</h3>
-                      <p className="text-sm text-[#5f6368] mb-8">For Sales & CRM Focus</p>
-                      <div className="mb-10">
-                          <span className="text-5xl font-medium text-[#202124]">₹3,999</span>
-                          <span className="text-gray-500 font-medium">/mo</span>
-                      </div>
-                      <ul className="space-y-4 mb-10 flex-1">
-                          {['LeadSarv CRM Core', 'WhatsApp Business API', 'RERA Booking Engine', 'Financial Dashboard'].map(f => (
-                              <li key={f} className="flex items-center gap-3 text-sm text-[#5f6368]"><i className="fas fa-check text-blue-500"></i> {f}</li>
+                  {PLANS.map((plan, i) => {
+                    const dark = i === 1;
+                    return (
+                      <div key={plan.id} className={`p-8 sm:p-10 rounded-3xl flex flex-col relative ${dark ? 'bg-[#202124] text-white shadow-2xl' : 'border border-[#dadce0] hover:shadow-xl transition-all'}`}>
+                        {dark && <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-[#1a73e8] px-4 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider">Full platform</div>}
+                        <h3 className="text-2xl font-bold mb-2">{plan.id}</h3>
+                        <p className={`text-sm mb-8 ${dark ? 'text-gray-400' : 'text-[#5f6368]'}`}>{plan.tagline}</p>
+                        <div className="mb-10">
+                          <span className="text-5xl font-medium">{plan.price}</span>
+                          <span className={`font-medium ${dark ? 'text-gray-400' : 'text-gray-500'}`}>/month</span>
+                        </div>
+                        <ul className="space-y-4 mb-10 flex-1">
+                          {plan.features.map((f) => (
+                            <li key={f} className={`flex items-start gap-3 text-sm ${dark ? 'text-gray-300' : 'text-[#5f6368]'}`}><i className={`fas fa-check mt-1 ${dark ? 'text-[#34a853]' : 'text-blue-500'}`} aria-hidden="true"></i> {f}</li>
                           ))}
-                      </ul>
-                      <button onClick={onStartFreeClick} className="w-full py-3 rounded-lg border-2 border-[#1a73e8] text-[#1a73e8] font-bold hover:bg-blue-50 transition-all">Start CRM Trial</button>
-                  </div>
-                  
-                  <div className="p-10 rounded-3xl bg-[#202124] text-white shadow-2xl relative flex flex-col">
-                      <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-[#1a73e8] px-4 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider">ENTERPRISE OS</div>
-                      <h3 className="text-2xl font-bold mb-2">Ultimate Stack</h3>
-                      <p className="text-sm text-gray-400 mb-8">Full CRM + ERP + Finance</p>
-                      <div className="mb-10">
-                          <span className="text-5xl font-medium">₹6,999</span>
-                          <span className="text-gray-400 font-medium">/mo</span>
+                        </ul>
+                        <button onClick={() => onStartFreeClick(plan.id)} className={`w-full min-h-12 rounded-lg font-bold transition-all ${dark ? 'bg-[#1a73e8] hover:bg-[#174ea6]' : 'border-2 border-[#1a73e8] text-[#1a73e8] hover:bg-blue-50'}`}>Choose {plan.id}</button>
                       </div>
-                      <ul className="space-y-4 mb-10 flex-1">
-                          {['LeadSarv + ProjectSarv', 'FinanceSarv Compliance Hub', 'Tally Sync Bridge', 'Advanced ERP Workflows'].map(f => (
-                              <li key={f} className="flex items-center gap-3 text-sm text-gray-300"><i className="fas fa-check text-[#34a853]"></i> {f}</li>
-                          ))}
-                      </ul>
-                      <button onClick={onStartFreeClick} className="w-full py-3 rounded-lg bg-[#1a73e8] font-bold hover:bg-[#174ea6] transition-all">Deploy Full Stack</button>
-                  </div>
+                    );
+                  })}
               </div>
             </div>
           </section>
@@ -344,18 +354,13 @@ const LandingPage: React.FC<LandingPageProps> = ({ onSignInClick, onStartFreeCli
                     <h5 className="font-bold text-white text-xs uppercase tracking-widest mb-6">Systems</h5>
                     <ul className="space-y-4 text-sm text-gray-400">
                         <li onClick={() => scrollToSection('crm-detail', 'LeadSarv CRM')} className="hover:text-white cursor-pointer">LeadSarv CRM</li>
-                        <li onClick={() => scrollToSection('products', 'Core Modules')} className="hover:text-white cursor-pointer">ProjectSarv ERP</li>
+                        <li onClick={() => scrollToSection('products', 'ProjectSarv ERP')} className="hover:text-white cursor-pointer">ProjectSarv ERP</li>
                         <li onClick={() => scrollToSection('finance-detail', 'FinanceSarv')} className="hover:text-white cursor-pointer">FinanceSarv</li>
                     </ul>
                 </div>
               </div>
               <div className="pt-10 border-t border-gray-800 flex flex-col md:flex-row justify-between items-center gap-6 text-xs text-gray-500">
-                <p>© 2024 MultiSarv Pvt.Ltd. All rights reserved.</p>
-                <div className="flex gap-6 uppercase font-bold tracking-widest">
-                  <button className="hover:text-white">Privacy</button>
-                  <button className="hover:text-white">Terms</button>
-                  <button className="hover:text-white">Cookies</button>
-                </div>
+                <p>© {new Date().getFullYear()} MultiSarv Pvt.Ltd. All rights reserved.</p>
               </div>
             </div>
           </footer>
@@ -366,8 +371,21 @@ const LandingPage: React.FC<LandingPageProps> = ({ onSignInClick, onStartFreeCli
                 <i className="fas fa-book-open"></i>
             </div>
             <h1 className="text-4xl md:text-5xl font-medium text-[#202124] mb-4">Documentation & Support</h1>
-            <p className="text-xl text-[#5f6368] max-w-2xl mx-auto mb-12">Learn how to deploy and scale your operations with RealtySarv.</p>
-            <button onClick={() => setCurrentPage('home')} className="mt-16 text-[#1a73e8] font-bold flex items-center gap-2 hover:underline">
+            <p className="text-xl text-[#5f6368] max-w-2xl mx-auto mb-12">Get your first workspace running in a few minutes.</p>
+            <ol className="w-full max-w-2xl text-left space-y-4">
+              {[
+                ['Create your workspace', 'Choose “Get started for free”, enter your company and admin details, and pick the modules you need.'],
+                ['Sign in as admin', 'Use the email and password you just set. The setup wizard walks you through company profile, projects, team and lead sources.'],
+                ['Invite your team', 'In Admin Settings → Users, add teammates and assign roles and projects. They sign in with their own email.'],
+                ['Start working', 'Capture leads in LeadSarv CRM, run site operations in ProjectSarv, and keep books in FinanceSarv.'],
+              ].map(([title, body], i) => (
+                <li key={title} className="flex gap-4 p-5 rounded-2xl border border-[#dadce0] bg-white">
+                  <span className="shrink-0 w-8 h-8 rounded-full bg-[#e8f0fe] text-[#1a73e8] font-bold flex items-center justify-center">{i + 1}</span>
+                  <div><h2 className="font-bold text-[#202124]">{title}</h2><p className="text-sm text-[#5f6368] mt-1 leading-relaxed">{body}</p></div>
+                </li>
+              ))}
+            </ol>
+            <button onClick={() => setCurrentPage('home')} className="mt-12 min-h-11 text-[#1a73e8] font-bold flex items-center gap-2 hover:underline">
                 <i className="fas fa-arrow-left text-xs"></i> Back to Overview
             </button>
         </div>
@@ -375,6 +393,62 @@ const LandingPage: React.FC<LandingPageProps> = ({ onSignInClick, onStartFreeCli
     </div>
   );
 };
+
+// Product mockups (sample data) used instead of stock photos.
+const PipelineMock: React.FC = () => (
+  <div className="bg-white p-4 sm:p-5 rounded-3xl shadow-2xl border border-green-200/50">
+    <div className="flex items-center justify-between mb-4">
+      <span className="text-sm font-bold text-[#202124]">Lead pipeline</span>
+      <span className="text-[10px] font-bold uppercase tracking-widest text-[#5f6368]">Sample data</span>
+    </div>
+    <div className="grid grid-cols-3 gap-3">
+      {[
+        ['Qualified', '#1a73e8', [['Neha Kulkarni', '2BHK · Pune'], ['Vikram Shah', '3BHK · Baner']]],
+        ['Site visit', '#1e8e3e', [['Aarav Mehta', 'Sat 11:00'], ['Isha Patil', 'Sun 16:30']]],
+        ['Token paid', '#b06000', [['Rohan Desai', '₹1.00L']]],
+      ].map(([title, color, cards]: any) => (
+        <div key={title} className="bg-[#f8f9fa] rounded-xl p-2.5">
+          <div className="flex items-center gap-1.5 mb-2"><span className="w-2 h-2 rounded-full" style={{ background: color }}></span><span className="text-[11px] font-bold text-[#202124]">{title}</span></div>
+          <div className="space-y-2">
+            {cards.map(([n, d]: string[]) => (
+              <div key={n} className="bg-white rounded-lg border border-black/5 shadow-sm p-2.5">
+                <p className="text-xs font-bold text-[#202124] truncate">{n}</p>
+                <p className="text-[10px] text-[#5f6368] mt-0.5">{d}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
+const ProcurementMock: React.FC = () => (
+  <div className="bg-white p-4 sm:p-5 rounded-3xl shadow-2xl border border-[#dadce0]">
+    <div className="flex items-center justify-between mb-4">
+      <span className="text-sm font-bold text-[#202124]">Purchase approvals</span>
+      <span className="text-[10px] font-bold uppercase tracking-widest text-[#5f6368]">Sample data</span>
+    </div>
+    <div className="divide-y divide-[#f1f3f4] border border-[#f1f3f4] rounded-xl">
+      {[
+        ['PR-0042', 'Cement OPC 53 · 400 bags', '₹1.52L', 'Project Mgr', 'bg-[#fef7e0] text-[#b06000]'],
+        ['PO-0017', 'TMT steel 12mm · 8 MT', '₹4.96L', 'Accounts', 'bg-[#e8f0fe] text-[#1a73e8]'],
+        ['PO-0016', 'Excavation · hard rock', '₹6.40L', 'Approved', 'bg-[#e6f4ea] text-[#1e8e3e]'],
+      ].map(([id, what, amt, st, cls]) => (
+        <div key={id} className="flex items-center justify-between gap-3 px-3 py-3">
+          <div className="min-w-0"><p className="text-xs font-bold text-[#202124]">{id}</p><p className="text-[11px] text-[#5f6368] truncate">{what}</p></div>
+          <div className="flex items-center gap-3 shrink-0"><span className="text-xs font-bold text-[#202124]">{amt}</span><span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${cls}`}>{st}</span></div>
+        </div>
+      ))}
+    </div>
+    <div className="mt-4 p-3 bg-[#f8f9fa] rounded-xl">
+      <p className="text-[11px] font-bold text-[#202124] mb-2">Stock vs minimum level</p>
+      {[['Cement', 70], ['Steel', 32]].map(([n, v]: any) => (
+        <div key={n} className="flex items-center gap-2 mb-1.5 last:mb-0"><span className="w-12 text-[10px] text-[#5f6368]">{n}</span><div className="flex-1 h-2 bg-[#dadce0] rounded-full overflow-hidden"><div className={`h-full ${v < 40 ? 'bg-[#d93025]' : 'bg-[#1a73e8]'}`} style={{ width: `${v}%` }}></div></div></div>
+      ))}
+    </div>
+  </div>
+);
 
 const FeatureCard: React.FC<{ title: string; desc: string; icon: string; color: string; bgColor: string; onClick: () => void }> = ({ title, desc, icon, color, bgColor, onClick }) => (
     <div onClick={onClick} className="p-10 rounded-3xl bg-white border border-[#dadce0] hover:shadow-xl hover:-translate-y-1 transition-all group cursor-pointer">

@@ -31,7 +31,6 @@ import AdminTaskIntegrations from './AdminTaskIntegrations';
 import AdminCustomIntegrations from './AdminCustomIntegrations';
 import AdminChannelPartnerManagement from './AdminChannelPartnerManagement';
 import AdminFormFieldCustomization from './AdminFormFieldCustomization';
-import AdminFirebaseSync from './AdminFirebaseSync';
 
 interface AdminPanelProps {
   leads: Lead[];
@@ -204,7 +203,6 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
             case 'storage': return <AdminStorageIntegrations />;
             case 'project-management': return <AdminTaskIntegrations />;
             case 'custom': return <AdminCustomIntegrations />;
-            case 'firebase-sync': return <AdminFirebaseSync />;
             case 'templates': return <AdminTemplateManagement templates={props.templates} onUpdateTemplates={props.onUpdateTemplates} onAddTemplate={props.onAddTemplate} />;
             case 'email': return <AdminConnectSarv activeItem="email" />;
             case 'meta':

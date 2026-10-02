@@ -1,270 +1,257 @@
-
 import React from 'react';
-import { User, CompanyProfile } from '../types';
-import { auth } from '../firebase';
-import { signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
-import { db } from '../db';
+import { User } from '../types';
+import { authApi, setToken } from '../httpClient';
+import { notifyAll } from '../liveQuery';
+import { mainSiteUrl } from '../tenant';
 
 interface LoginPageProps {
   onLoginSuccess: (user: User) => void;
   onGoToInstall: () => void;
-  isInstalled: boolean;
-  users: User[];
-  companyProfile?: CompanyProfile;
-  onBackToLanding: () => void;
 }
 
-const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onGoToInstall, isInstalled, users, companyProfile, onBackToLanding }) => {
-  const [username, setUsername] = React.useState<string>('');
-  const [password, setPassword] = React.useState<string>('');
+type Mode = 'signin' | 'signup';
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const MIN_PASSWORD = 6;
+
+const inputClass = (invalid: boolean) =>
+  `w-full h-12 px-4 rounded-lg border text-base text-[#202124] placeholder-[#80868b] bg-white focus:outline-none focus:ring-2 transition-colors ${
+    invalid ? 'border-[#d93025] focus:ring-[#d93025]/30' : 'border-[#dadce0] focus:border-[#1a73e8] focus:ring-[#1a73e8]/30'
+  }`;
+
+const friendlyError = (err: any): string => {
+  if (err?.status === 401) return 'That email/username and password don’t match. Please try again.';
+  if (err?.status === 403) return err.message || 'Your account is disabled. Contact your workspace admin.';
+  if (err?.status === 409) return 'This email already has an account. Sign in instead.';
+  if (err?.status) return err.message || 'Something went wrong. Please try again.';
+  return 'Can’t reach the server. Check your connection and try again.';
+};
+
+const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onGoToInstall }) => {
+  const [mode, setMode] = React.useState<Mode>('signin');
+  const [name, setName] = React.useState('');
+  const [identity, setIdentity] = React.useState('');
+  const [password, setPassword] = React.useState('');
+  const [confirm, setConfirm] = React.useState('');
+  const [showPassword, setShowPassword] = React.useState(false);
+  const [touched, setTouched] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [loginStep, setLoginStep] = React.useState<'identity' | 'password'>('identity');
-  const [authMode, setAuthMode] = React.useState<'signin' | 'signup'>('signin');
   const [isLoading, setIsLoading] = React.useState(false);
 
-  const [activeSubdomain, setActiveSubdomain] = React.useState<string>(() => {
-    const hostname = window.location.hostname;
-    if (hostname.includes('realtysarv.com')) {
-      const parts = hostname.split('.');
-      if (parts.length > 2) return parts[0].toLowerCase();
-    }
-    return localStorage.getItem('realtySarvActiveSubdomain') || '';
-  });
-  const [isEditingSub, setIsEditingSub] = React.useState(false);
-  const [typedSub, setTypedSub] = React.useState(activeSubdomain);
+  // The company comes from the address in the browser (acme.realtysarv.com); the server tells us its name.
+  const [workspace, setWorkspace] = React.useState<{ name: string; subdomain: string; allowSignup?: boolean } | null>(null);
+  const [notFound, setNotFound] = React.useState(false);
+  React.useEffect(() => {
+    authApi.workspace().then(setWorkspace).catch((e) => { if (e?.status === 404 || e?.status === 400) setNotFound(true); });
+  }, []);
+  const allowSignup = workspace?.allowSignup === true;
+  const workspaceName = workspace?.name || '';
 
-  const handleSwitchWorkspace = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!typedSub.trim()) return;
-    const cleanSub = typedSub.trim().toLowerCase();
-    localStorage.setItem('realtySarvActiveSubdomain', cleanSub);
-    setActiveSubdomain(cleanSub);
-    setIsEditingSub(false);
+  const switchMode = (next: Mode) => {
+    setMode(next);
+    setError(null);
+    setTouched(false);
+    setPassword('');
+    setConfirm('');
+    setShowPassword(false);
+    if (next === 'signup' && !EMAIL_RE.test(identity.trim())) setIdentity('');
   };
 
-  const syncFirebaseUserToLocal = React.useCallback(async (firebaseUser: { uid: string; email?: string | null; displayName?: string | null; phoneNumber?: string | null }) => {
-    const normalizedEmail = firebaseUser.email?.trim().toLowerCase() || '';
-    const existingUser = users.find(u => u.email?.trim().toLowerCase() === normalizedEmail);
+  // Field-level validation, shown only after the first submit attempt.
+  const mail = identity.trim().toLowerCase();
+  const errors: Record<string, string> = {};
+  if (mode === 'signup') {
+    if (!name.trim()) errors.name = 'Enter your full name.';
+    if (!EMAIL_RE.test(mail)) errors.identity = 'Enter a valid email address, like name@company.com.';
+    if (password.length < MIN_PASSWORD) errors.password = `Use at least ${MIN_PASSWORD} characters.`;
+    if (confirm !== password) errors.confirm = 'Passwords don’t match.';
+  } else {
+    if (!mail) errors.identity = 'Enter your email or username.';
+    if (!password) errors.password = 'Enter your password.';
+  }
+  const show = (k: string) => (touched ? errors[k] : undefined);
 
-    if (existingUser) {
-      onLoginSuccess({ ...existingUser, id: firebaseUser.uid, email: existingUser.email || normalizedEmail });
-      return;
-    }
-
-    const newUser: User = {
-      id: firebaseUser.uid,
-      name: firebaseUser.displayName || normalizedEmail.split('@')[0] || 'New User',
-      username: normalizedEmail.split('@')[0] || firebaseUser.uid,
-      email: normalizedEmail,
-      phone: firebaseUser.phoneNumber || '',
-      role: normalizedEmail === 'ramdasraut9@gmail.com' ? 'Admin' : 'Sales',
-      isActive: true,
-      assignedProjectIds: []
-    };
-
-    await db.users.put(newUser);
-    onLoginSuccess(newUser);
-  }, [onLoginSuccess, users]);
-
-  const handleGoogleLogin = async () => {
-    setIsLoading(true);
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setTouched(true);
     setError(null);
+    if (Object.keys(errors).length) return;
+
+    setIsLoading(true);
     try {
-      const provider = new GoogleAuthProvider();
-      const result = await signInWithPopup(auth, provider);
-      await syncFirebaseUserToLocal(result.user);
+      const result: any = mode === 'signup'
+        ? await authApi.register({ name: name.trim(), email: mail, password })
+        : await authApi.login(mail, password);
+      setToken(result.token);
+      notifyAll();
+      onLoginSuccess(result.user as User);
     } catch (err: any) {
-      console.error('Google Sign In Error:', err);
-      setError(err.message || 'Verification cancelled or failed.');
+      setError(friendlyError(err));
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleNext = (e: React.FormEvent) => {
-    e.preventDefault();
-    const email = username.trim().toLowerCase();
-    if (!email) {
-      setError('Enter an email address');
-      return;
-    }
-    setError(null);
-    setLoginStep('password');
-  };
+  const isSignup = mode === 'signup';
 
-  const handleSubmit = React.useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setIsLoading(true);
-
-    const email = username.trim().toLowerCase();
-    try {
-      if (authMode === 'signup') {
-        const result = await createUserWithEmailAndPassword(auth, email, password);
-        await syncFirebaseUserToLocal(result.user);
-      } else {
-        const result = await signInWithEmailAndPassword(auth, email, password);
-        await syncFirebaseUserToLocal(result.user);
-      }
-    } catch (err: any) {
-      console.error('Email auth error:', err);
-      const message = err?.code === 'auth/email-already-in-use'
-        ? 'This email already has an account. Please sign in instead.'
-        : err?.code === 'auth/invalid-credential'
-          ? 'Invalid email or password.'
-          : err?.message || 'Authentication failed.';
-      setError(message);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [authMode, password, syncFirebaseUserToLocal, username]);
+  if (notFound) {
+    return (
+      <div className="min-h-screen w-full bg-white flex items-center justify-center px-4 py-16 font-sans">
+        <main className="w-full max-w-[440px] text-center bg-white rounded-3xl border border-[#dadce0] p-8 sm:p-10 shadow-[0_1px_3px_0_rgba(60,64,67,0.3),0_4px_8px_3px_rgba(60,64,67,0.15)]">
+          <div className="w-14 h-14 mx-auto mb-5 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center text-2xl"><i className="fas fa-compass" aria-hidden="true"></i></div>
+          <h1 className="text-2xl font-medium text-[#202124]">Workspace not found</h1>
+          <p className="text-sm text-[#5f6368] mt-2 leading-relaxed"><b>{window.location.hostname}</b> isn’t a RealtySarv workspace. Check the address your admin gave you, or find your workspace by name.</p>
+          <a href={mainSiteUrl('#find')} className="mt-6 inline-flex items-center justify-center w-full h-12 bg-[#1a73e8] text-white rounded-lg font-bold text-sm hover:bg-[#174ea6]">Find your workspace</a>
+        </main>
+      </div>
+    );
+  }
 
   return (
-    <div className="relative min-h-screen w-full bg-white flex flex-col items-center justify-center p-6 font-sans overflow-hidden">
-      <div className="absolute top-0 left-0 w-full h-full pointer-events-none overflow-hidden">
+    <div className="relative min-h-screen w-full bg-white flex flex-col items-center justify-center px-4 py-20 sm:px-6 font-sans overflow-y-auto">
+      <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
         <div className="absolute top-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-50 rounded-full blur-[120px] opacity-60"></div>
         <div className="absolute bottom-[-10%] left-[-10%] w-[40%] h-[40%] bg-green-50 rounded-full blur-[120px] opacity-60"></div>
       </div>
 
-      <button
-        onClick={onBackToLanding}
-        className="fixed top-8 left-8 text-[#5f6368] hover:text-[#1a73e8] font-medium text-sm flex items-center gap-2 transition-colors z-50"
+      <a
+        href={mainSiteUrl()}
+        className="absolute top-3 left-3 sm:top-6 sm:left-6 min-h-11 px-3 text-[#5f6368] hover:text-[#1a73e8] font-medium text-sm flex items-center gap-2 transition-colors z-50 rounded-lg"
       >
-        <i className="fas fa-arrow-left text-xs"></i> BACK TO OVERVIEW
-      </button>
+        <i className="fas fa-arrow-left text-xs" aria-hidden="true"></i> RealtySarv home
+      </a>
 
-      <div className="w-full max-w-[450px] bg-white rounded-3xl border border-[#dadce0] p-10 md:p-12 shadow-[0_1px_3px_0_rgba(60,64,67,0.3),0_4px_8px_3px_rgba(60,64,67,0.15)] z-10 relative overflow-hidden transition-all duration-500">
-        <div className="flex flex-col items-center mb-8">
-          <div className="flex items-center gap-2.5 mb-6">
+      <main className="w-full max-w-[440px] bg-white rounded-3xl border border-[#dadce0] p-6 sm:p-10 shadow-[0_1px_3px_0_rgba(60,64,67,0.3),0_4px_8px_3px_rgba(60,64,67,0.15)] z-10 relative">
+        <div className="flex flex-col items-center mb-6">
+          <div className="flex items-center gap-2.5 mb-5">
             <div className="w-8 h-8 bg-[#1a73e8] rounded-sm flex items-center justify-center text-white shadow-sm">
-              <i className="fas fa-cube text-xs"></i>
+              <i className="fas fa-cube text-xs" aria-hidden="true"></i>
             </div>
             <span className="text-2xl font-medium tracking-tight text-[#5f6368]">
               Realty<span className="text-[#202124] font-bold">Sarv</span>
             </span>
           </div>
-          <h2 className="text-2xl font-medium text-[#202124] text-center">{loginStep === 'identity' ? (authMode === 'signup' ? 'Create account' : 'Sign in') : 'Welcome'}</h2>
-          <p className="text-[#202124] text-base mt-2 flex items-center gap-2">
-            {loginStep === 'identity' ? (authMode === 'signup' ? 'Create a Firebase account for RealtySarv' : 'Use your RealtySarv Account') : (
-              <span className="flex items-center gap-2 bg-[#f1f3f4] px-3 py-1 rounded-full border border-[#dadce0] text-sm">
-                <i className="fas fa-user-circle text-[#5f6368]"></i> {username}
-                <button onClick={() => setLoginStep('identity')} className="text-[#1a73e8] hover:text-[#174ea6]"><i className="fas fa-chevron-down text-[10px]"></i></button>
-              </span>
-            )}
+          <h1 className="text-2xl font-medium text-[#202124] text-center">{isSignup ? 'Create your account' : 'Sign in'}</h1>
+          <p className="text-[#5f6368] text-sm mt-1.5 text-center">
+            {isSignup ? 'Join your team’s RealtySarv workspace.' : 'Welcome back. Sign in to continue.'}
           </p>
-          {isEditingSub ? (
-            <form onSubmit={handleSwitchWorkspace} className="mt-4 flex flex-col items-center bg-slate-50 border border-[#1a73e8]/30 rounded-xl p-3 text-center w-full animate-fadeIn">
-              <span className="text-[10px] font-bold text-[#1a73e8] uppercase tracking-widest mb-1.5">Change Workspace Subdomain</span>
-              <div className="flex items-center gap-1.5 justify-center w-full max-w-[280px]">
-                <div className="relative flex items-center w-full">
-                  <input
-                    autoFocus
-                    required
-                    type="text"
-                    id="subdomain-change-input"
-                    placeholder="e.g. shreesh"
-                    value={typedSub}
-                    onChange={(e) => setTypedSub(e.target.value)}
-                    className="w-full px-3 py-1.5 rounded-lg border border-gray-300 text-xs font-semibold text-slate-800 focus:outline-none focus:border-[#1a73e8]"
-                  />
-                  <span className="absolute right-3 text-[10px] text-gray-400 font-bold font-mono">.realtysarv.com</span>
-                </div>
-              </div>
-              <div className="flex gap-2 mt-2">
-                <button type="submit" className="px-3 py-1 bg-[#1a73e8] text-white text-[10px] font-bold rounded-lg hover:bg-[#174ea6] transition-colors">Apply Route</button>
-                <button type="button" onClick={() => setIsEditingSub(false)} className="px-3 py-1 bg-gray-100 hover:bg-gray-200 text-slate-600 text-[10px] font-bold rounded-lg transition-colors">Cancel</button>
-              </div>
-            </form>
-          ) : (
-            <div className="mt-4 flex flex-col items-center bg-slate-50 border border-slate-200/50 rounded-xl px-4 py-2.5 text-center w-full animate-fadeIn shadow-inner">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Enterprise Client Workspace</span>
-              <div className="flex flex-col items-center gap-1 justify-center">
-                <div className="flex items-center gap-1.5 justify-center">
-                  <i className="fas fa-building text-[#1a73e8] text-[11px]"></i>
-                  <span id="active-workspace-name" className="text-xs font-extrabold text-slate-700 tracking-tight">
-                    {activeSubdomain && companyProfile?.customData?.subdomain === activeSubdomain
-                      ? companyProfile.name
-                      : (activeSubdomain ? `${activeSubdomain.charAt(0).toUpperCase() + activeSubdomain.slice(1)} Realty` : (companyProfile?.name || "My RealtySarv Workspace"))
-                    }
-                  </span>
-                </div>
-                <div className="flex items-center gap-1 justify-center">
-                  <span className="text-[10px] font-bold font-mono text-slate-500 bg-slate-200/50 border border-slate-200 px-2 py-0.5 rounded-md">
-                    {activeSubdomain ? `${activeSubdomain}.realtysarv.com` : 'local-default'}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => { setTypedSub(activeSubdomain); setIsEditingSub(true); }}
-                    className="text-[10px] font-bold text-[#1a73e8] hover:underline ml-1"
-                  >
-                    (switch)
-                  </button>
-                </div>
-              </div>
+        </div>
+
+        {/* Workspace (fixed by the address; to use another company, open that company's address) */}
+        <div className="mb-6 flex items-center justify-between gap-3 bg-slate-50 border border-slate-200 rounded-xl pl-4 pr-1 py-1">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <i className="fas fa-building text-[#1a73e8] text-sm" aria-hidden="true"></i>
+            <div className="min-w-0">
+              <p className="text-xs text-slate-500 leading-tight">{isSignup ? 'Joining workspace' : 'Workspace'}</p>
+              <p id="active-workspace-name" className="text-sm font-bold text-slate-800 truncate">{workspaceName || window.location.hostname}</p>
             </div>
-          )}
+          </div>
+          <a href={mainSiteUrl('#find')} className="min-h-11 px-3 flex items-center text-sm font-bold text-[#1a73e8] hover:underline shrink-0">Not yours?</a>
         </div>
 
-        <div className="relative min-h-[140px]">
-          {error && (
-            <div id="login-error-alert" className="mb-4 text-xs text-[#d93025] flex items-center gap-2 bg-red-50 p-3 rounded-lg border border-red-100 animate-fadeIn">
-              <i className="fas fa-exclamation-circle text-xs flex-shrink-0"></i>
-              <span>{error}</span>
+        <form onSubmit={handleSubmit} noValidate className="space-y-4">
+          <div id="login-error-alert" role="alert" aria-live="polite" className={error ? 'text-sm text-[#d93025] flex items-start gap-2 bg-red-50 p-3 rounded-lg border border-red-100' : 'sr-only'}>
+            {error && <><i className="fas fa-exclamation-circle mt-0.5 shrink-0" aria-hidden="true"></i><span>{error}</span></>}
+          </div>
+
+          {isSignup && (
+            <Field id="fullname" label="Full name" error={show('name')}>
+              <input id="fullname" name="name" type="text" autoComplete="name" autoFocus value={name} onChange={(e) => setName(e.target.value)}
+                aria-invalid={!!show('name')} aria-describedby={show('name') ? 'fullname-err' : undefined} className={inputClass(!!show('name'))} placeholder="Your full name" />
+            </Field>
+          )}
+
+          <Field id="username" label={isSignup ? 'Work email' : 'Email or username'} error={show('identity')}>
+            <input
+              id="username"
+              name={isSignup ? 'email' : 'username'}
+              type={isSignup ? 'email' : 'text'}
+              inputMode={isSignup ? 'email' : undefined}
+              autoComplete={isSignup ? 'email' : 'username'}
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              autoFocus={!isSignup}
+              value={identity}
+              onChange={(e) => setIdentity(e.target.value)}
+              aria-invalid={!!show('identity')}
+              aria-describedby={show('identity') ? 'username-err' : undefined}
+              className={inputClass(!!show('identity'))}
+              placeholder={isSignup ? 'name@company.com' : 'Email or username'}
+            />
+          </Field>
+
+          <Field id="password" label="Password" error={show('password')} hint={isSignup && !show('password') ? `At least ${MIN_PASSWORD} characters.` : undefined}>
+            <div className="relative">
+              <input
+                id="password"
+                name="password"
+                type={showPassword ? 'text' : 'password'}
+                autoComplete={isSignup ? 'new-password' : 'current-password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                aria-invalid={!!show('password')}
+                aria-describedby={show('password') ? 'password-err' : undefined}
+                className={`${inputClass(!!show('password'))} pr-12`}
+                placeholder={isSignup ? 'Create a password' : 'Your password'}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                aria-pressed={showPassword}
+                className="absolute right-1 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center text-[#5f6368] hover:text-[#202124] rounded-lg"
+              >
+                <i className={`fas ${showPassword ? 'fa-eye-slash' : 'fa-eye'}`} aria-hidden="true"></i>
+              </button>
             </div>
-          )}
-          {loginStep === 'identity' ? (
-            <form onSubmit={handleNext} className="animate-fadeIn space-y-6">
-              <div className="relative group">
-                <input autoFocus type="text" id="username" value={username} onChange={(e) => setUsername(e.target.value)} className="w-full px-4 py-4 rounded-md border border-[#dadce0] text-[#202124] text-base placeholder-transparent focus:outline-none focus:border-[#1a73e8] focus:ring-1 focus:ring-[#1a73e8] transition-all peer" placeholder="Username" />
-                <label htmlFor="username" className="absolute left-4 -top-2.5 bg-white px-1 text-xs text-[#1a73e8] transition-all peer-placeholder-shown:text-base peer-placeholder-shown:text-[#5f6368] peer-placeholder-shown:top-4 peer-focus:-top-2.5 peer-focus:text-xs peer-focus:text-[#1a73e8]">Email or username</label>
-              </div>
-            </form>
-          ) : (
-            <form onSubmit={handleSubmit} className="animate-fadeIn space-y-6">
-              <div className="relative group">
-                <input autoFocus type="password" id="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full px-4 py-4 rounded-md border border-[#dadce0] text-[#202124] text-base placeholder-transparent focus:outline-none focus:border-[#1a73e8] focus:ring-1 focus:ring-[#1a73e8] transition-all peer" placeholder="Password" />
-                <label htmlFor="password" className="absolute left-4 -top-2.5 bg-white px-1 text-xs text-[#1a73e8] transition-all peer-placeholder-shown:text-base peer-placeholder-shown:text-[#5f6368] peer-placeholder-shown:top-4 peer-focus:-top-2.5 peer-focus:text-xs peer-focus:text-[#1a73e8]">Enter your password</label>
-              </div>
-            </form>
-          )}
-        </div>
+          </Field>
 
-        <div className="flex justify-between items-center mt-12 mb-6">
-          {loginStep === 'identity' ? (
-            <button type="button" onClick={() => {
-              setAuthMode(authMode === 'signin' ? 'signup' : 'signin');
-              setError(null);
-            }} className="text-[#1a73e8] font-bold text-sm hover:bg-blue-50 px-4 py-2 rounded transition-colors">
-              {authMode === 'signin' ? 'Create account' : 'Back to sign in'}
-            </button>
-          ) : <div className="invisible"></div>}
-          <button onClick={loginStep === 'identity' ? handleNext : handleSubmit} disabled={isLoading} className="px-8 py-2.5 bg-[#1a73e8] text-white rounded font-bold text-sm hover:bg-[#174ea6] transition-all shadow-md active:scale-95 flex items-center gap-2 min-w-[100px] justify-center">{isLoading ? <i className="fas fa-circle-notch fa-spin text-lg"></i> : (loginStep === 'identity' ? 'Next' : (authMode === 'signup' ? 'Create account' : 'Login'))}</button>
-        </div>
+          {isSignup && (
+            <Field id="confirm" label="Confirm password" error={show('confirm')}>
+              <input id="confirm" name="confirm" type={showPassword ? 'text' : 'password'} autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)}
+                aria-invalid={!!show('confirm')} aria-describedby={show('confirm') ? 'confirm-err' : undefined} className={inputClass(!!show('confirm'))} placeholder="Re-enter your password" />
+            </Field>
+          )}
 
-        {/* Google Authentication Divider & Button */}
-        <div className="border-t border-[#dadce0] pt-6 flex flex-col items-center">
           <button
-            type="button"
-            onClick={handleGoogleLogin}
+            type="submit"
             disabled={isLoading}
-            className="w-full flex items-center justify-center gap-3 px-4 py-3 border border-[#dadce0] rounded-md bg-white hover:bg-gray-50 text-gray-700 font-bold text-sm shadow-sm transition-all duration-200 active:scale-[0.98]"
+            className="w-full h-12 bg-[#1a73e8] text-white rounded-lg font-bold text-sm hover:bg-[#174ea6] disabled:opacity-70 disabled:cursor-not-allowed transition-colors shadow-md flex items-center justify-center gap-2"
           >
-            <i className="fab fa-google text-red-500 text-base"></i>
-            Sign in with Google
+            {isLoading
+              ? <><i className="fas fa-circle-notch fa-spin" aria-hidden="true"></i> {isSignup ? 'Creating account…' : 'Signing in…'}</>
+              : (isSignup ? 'Create account' : 'Sign in')}
           </button>
-        </div>
-      </div>
+        </form>
 
-      <div className="mt-12 flex flex-wrap justify-center gap-6 text-xs text-[#5f6368] font-medium z-10">
-        <button className="hover:underline">English (United Kingdom)</button>
-        <div className="flex gap-6">
-          <button className="hover:underline">Help</button>
-          <button className="hover:underline">Privacy</button>
-          <button className="hover:underline">Terms</button>
+        <div className="mt-6 pt-5 border-t border-[#e8eaed] text-sm text-[#5f6368] space-y-1 text-center">
+          {allowSignup && (
+            <p>
+              {isSignup ? 'Already have an account?' : 'New to this workspace?'}{' '}
+              <button type="button" onClick={() => switchMode(isSignup ? 'signin' : 'signup')} className="min-h-11 px-1 font-bold text-[#1a73e8] hover:underline">
+                {isSignup ? 'Sign in' : 'Create an account'}
+              </button>
+            </p>
+          )}
+          {!isSignup && <p className="text-xs text-[#5f6368]">Forgot your password? Ask your workspace admin to reset it.</p>}
+          <p>
+            Setting up a new company?{' '}
+            <button type="button" onClick={onGoToInstall} className="min-h-11 px-1 font-bold text-[#1a73e8] hover:underline">Start free</button>
+          </p>
         </div>
-      </div>
+      </main>
     </div>
   );
 };
+
+const Field: React.FC<{ id: string; label: string; error?: string; hint?: string; children: React.ReactNode }> = ({ id, label, error, hint, children }) => (
+  <div>
+    <label htmlFor={id} className="block text-sm font-medium text-[#202124] mb-1.5">{label}</label>
+    {children}
+    {error && <p id={`${id}-err`} className="mt-1.5 text-xs text-[#d93025] flex items-center gap-1.5"><i className="fas fa-exclamation-circle" aria-hidden="true"></i>{error}</p>}
+    {!error && hint && <p className="mt-1.5 text-xs text-[#5f6368]">{hint}</p>}
+  </div>
+);
 
 export default LoginPage;

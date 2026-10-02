@@ -5,22 +5,17 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:emulator": "firebase emulators:start --project gen-lang-client-0873542795 & npm run dev",
-    "emulator": "firebase emulators:start --project gen-lang-client-0873542795",
+    "server": "npm --prefix server run dev",
+    "db:up": "docker compose up -d mongo",
+    "db:seed": "npm --prefix server run seed",
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint . --ext .ts,.tsx"
   },
   "dependencies": {
     "cors": "^2.8.5",
-    "dexie": "^4.0.0",
-    "dexie-react-hooks": "^1.1.0",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
-    "firebase": "^12.14.0",
-    "firebase-admin": "^14.1.0",
-    "mysql2": "^3.16.0",
-    "pg": "^8.22.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "uuid": "^13.0.0"
@@ -30,7 +25,6 @@
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/node": "^22.14.0",
-    "@types/pg": "^8.20.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@types/uuid": "^10.0.0",

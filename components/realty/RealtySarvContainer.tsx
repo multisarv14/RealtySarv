@@ -8,7 +8,7 @@ import BOQPlanning from './BOQPlanning';
 import ProcurementHub from './ProcurementHub';
 import ContractingHub from './ContractingHub';
 import { db } from '../../db';
-import { useLiveQuery } from 'dexie-react-hooks';
+import { useLiveQuery } from '../../liveQuery';
 import { v4 as uuidv4 } from 'uuid';
 
 interface RealtySarvContainerProps {

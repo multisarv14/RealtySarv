@@ -1,441 +1,363 @@
-
 import React from 'react';
 import { NewUserData } from '../types';
+import { tenantApi } from '../httpClient';
+import { workspaceHostSuffix } from '../tenant';
+import { PLANS, PlanId, getPlan } from '../plans';
 
 interface InstallationWizardProps {
-  onComplete: (adminData: NewUserData, companyName: string, plan: string, modules: { crm: boolean; erp: boolean }, subdomain: string) => void;
+  /** Creates the workspace and resolves with its sign-in URL (rejects with a readable message). */
+  onComplete: (adminData: NewUserData, companyName: string, plan: string, modules: { crm: boolean; erp: boolean }, subdomain: string) => Promise<string>;
   onGoToLogin: () => void;
+  /** Plan chosen on the landing page pricing cards. */
+  initialPlan?: PlanId;
 }
 
-const VerticalStepper: React.FC<{ currentStep: number }> = ({ currentStep }) => {
-  const steps = [
-    { title: 'Identity', description: 'Admin profile' },
-    { title: 'Modules', description: 'Configure stack' },
-    { title: 'Workspace', description: 'Business details' },
-    { title: 'Select Plan', description: 'Usage model' },
-    { title: 'Deploy', description: 'Final review' },
-  ];
+const STEPS = [
+  { title: 'Your details', description: 'Owner account' },
+  { title: 'Your company', description: 'Name and address' },
+  { title: 'Choose a plan', description: 'What’s included' },
+  { title: 'Review', description: 'Create workspace' },
+];
 
-  return (
-    <div className="flex flex-col gap-8 py-6">
-      {steps.map((step, index) => {
-        const stepNum = index + 1;
-        const isActive = stepNum === currentStep;
-        const isCompleted = stepNum < currentStep;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const MIN_PASSWORD = 6;
 
+type Errors = Record<string, string>;
+type SubStatus = { state: 'idle' | 'checking' | 'ok' | 'bad'; reason?: string };
+
+const VerticalStepper: React.FC<{ currentStep: number }> = ({ currentStep }) => (
+  <ol className="flex flex-col gap-8 py-6">
+    {STEPS.map((step, index) => {
+      const stepNum = index + 1;
+      const isActive = stepNum === currentStep;
+      const isCompleted = stepNum < currentStep;
+      return (
+        <li key={step.title} className="flex items-start gap-5 relative" aria-current={isActive ? 'step' : undefined}>
+          {index < STEPS.length - 1 && (
+            <div className={`absolute left-[15px] top-8 bottom-[-32px] w-0.5 ${isCompleted ? 'bg-[#1a73e8]' : 'bg-[#dadce0]'} transition-colors duration-500`}></div>
+          )}
+          <div className={`w-8 h-8 rounded-full flex items-center justify-center border-2 z-10 transition-all duration-300 ${isActive || isCompleted ? 'bg-[#1a73e8] border-[#1a73e8] text-white' : 'bg-white border-[#dadce0] text-gray-400'} ${isActive ? 'shadow-lg' : ''}`}>
+            {isCompleted ? <i className="fas fa-check text-[10px]" aria-hidden="true"></i> : <span className="text-xs font-bold">{stepNum}</span>}
+          </div>
+          <div className={`flex flex-col transition-all duration-300 ${isActive ? 'opacity-100' : 'opacity-60'}`}>
+            <span className={`text-sm font-bold ${isActive ? 'text-[#1a73e8]' : 'text-gray-700'}`}>{step.title}</span>
+            <span className="text-xs text-gray-500">{step.description}</span>
+          </div>
+        </li>
+      );
+    })}
+  </ol>
+);
+
+const InstallationWizard: React.FC<InstallationWizardProps> = ({ onComplete, onGoToLogin, initialPlan }) => {
+  const [step, setStep] = React.useState(1);
+  const [status, setStatus] = React.useState<'form' | 'creating' | 'done'>('form');
+  const [serverError, setServerError] = React.useState<string | null>(null);
+  const [showErrors, setShowErrors] = React.useState(false);
+  const [showPassword, setShowPassword] = React.useState(false);
+  const [subStatus, setSubStatus] = React.useState<SubStatus>({ state: 'idle' });
+  const [formData, setFormData] = React.useState({
+    plan: (initialPlan ?? PLANS[0].id) as PlanId,
+    companyName: '',
+    subdomain: '',
+    adminName: '',
+    adminEmail: '',
+    adminPhone: '',
+    adminUsername: '',
+    adminPassword: '',
+    adminConfirmPassword: '',
+  });
+  const [builtUrl, setBuiltUrl] = React.useState('');
+
+  const plan = getPlan(formData.plan);
+  const address = `${formData.subdomain}${workspaceHostSuffix()}`;
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    // The address becomes part of a web address: lowercase letters, numbers and hyphens only.
+    const next = name === 'subdomain' ? value.toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 30) : value;
+    setFormData((prev) => ({ ...prev, [name]: next }));
+  };
+
+  // Live "is this address free?" check while the owner types.
+  React.useEffect(() => {
+    const sub = formData.subdomain;
+    if (!sub) { setSubStatus({ state: 'idle' }); return; }
+    setSubStatus({ state: 'checking' });
+    let alive = true;
+    const timer = setTimeout(() => {
+      tenantApi.check(sub)
+        .then((r) => { if (alive) setSubStatus(r.available ? { state: 'ok' } : { state: 'bad', reason: r.reason }); })
+        .catch(() => { if (alive) setSubStatus({ state: 'bad', reason: 'Could not check this address. Is the server running?' }); });
+    }, 400);
+    return () => { alive = false; clearTimeout(timer); };
+  }, [formData.subdomain]);
+
+  const errorsFor = (s: number): Errors => {
+    const e: Errors = {};
+    if (s === 1) {
+      if (!formData.adminName.trim()) e.adminName = 'Enter your full name.';
+      if (!EMAIL_RE.test(formData.adminEmail.trim())) e.adminEmail = 'Enter a valid email, like name@company.com.';
+      if (formData.adminUsername.trim().length < 3) e.adminUsername = 'Choose a username of at least 3 characters.';
+      if (formData.adminPhone.replace(/\D/g, '').length < 8) e.adminPhone = 'Enter a valid mobile number.';
+      if (formData.adminPassword.length < MIN_PASSWORD) e.adminPassword = `Use at least ${MIN_PASSWORD} characters.`;
+      if (formData.adminConfirmPassword !== formData.adminPassword) e.adminConfirmPassword = 'Passwords don’t match.';
+    }
+    if (s === 2) {
+      if (!formData.companyName.trim()) e.companyName = 'Enter your company name.';
+      if (!formData.subdomain) e.subdomain = 'Choose the address your team will sign in at.';
+      else if (subStatus.state === 'bad') e.subdomain = subStatus.reason || 'Choose a different address.';
+      else if (subStatus.state === 'checking') e.subdomain = 'Checking that address…';
+    }
+    return e;
+  };
+  const errors = errorsFor(step);
+  const err = (k: string) => (showErrors ? errors[k] : undefined);
+
+  const goTo = (n: number) => { setStep(n); setShowErrors(false); setServerError(null); };
+
+  const handleNext = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (Object.keys(errors).length) { setShowErrors(true); return; }
+    if (step < STEPS.length) { goTo(step + 1); return; }
+    handleCreate();
+  };
+
+  const handleCreate = async () => {
+    setStatus('creating');
+    setServerError(null);
+    try {
+      const url = await onComplete({
+        name: formData.adminName.trim(),
+        email: formData.adminEmail.trim(),
+        phone: formData.adminPhone.trim(),
+        username: formData.adminUsername.trim(),
+        password: formData.adminPassword,
+        role: 'Admin',
+        assignedProjectIds: [],
+      }, formData.companyName.trim(), plan.id, plan.modules, formData.subdomain);
+      setBuiltUrl(url);
+      setStatus('done');
+      await new Promise((r) => setTimeout(r, 1400));
+      window.location.href = url;
+    } catch (e: any) {
+      const message = e?.message || 'Could not create the workspace.';
+      setServerError(message);
+      setStatus('form');
+      if (/address|taken|reserved/i.test(message)) { setStep(2); setShowErrors(true); }
+    }
+  };
+
+  const renderStep = () => {
+    switch (step) {
+      case 1:
         return (
-          <div key={index} className="flex items-start gap-5 relative">
-            {index < steps.length - 1 && (
-              <div className={`absolute left-[15px] top-8 bottom-[-32px] w-0.5 ${isCompleted ? 'bg-[#1a73e8]' : 'bg-[#dadce0]'} transition-colors duration-500`}></div>
-            )}
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center border-2 z-10 transition-all duration-300 ${isActive ? 'bg-[#1a73e8] border-[#1a73e8] text-white shadow-lg' : isCompleted ? 'bg-[#1a73e8] border-[#1a73e8] text-white' : 'bg-white border-[#dadce0] text-gray-400'}`}>
-              {isCompleted ? <i className="fas fa-check text-[10px]"></i> : <span className="text-xs font-bold">{stepNum}</span>}
-            </div>
-            <div className={`flex flex-col transition-all duration-300 ${isActive ? 'opacity-100 translate-x-1' : 'opacity-50'}`}>
-              <span className={`text-[11px] font-bold uppercase tracking-wider ${isActive ? 'text-[#1a73e8]' : 'text-gray-600'}`}>{step.title}</span>
-              <span className="text-[10px] text-gray-400 font-medium">{step.description}</span>
+          <div className="space-y-6">
+            <Heading title="Create the owner account" sub="You’ll be the administrator of your company’s workspace and can add your team later." />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <FormInput label="Full name" name="adminName" value={formData.adminName} onChange={handleInputChange} placeholder="Your full name" autoComplete="name" error={err('adminName')} autoFocus />
+              <FormInput label="Work email" name="adminEmail" type="email" value={formData.adminEmail} onChange={handleInputChange} placeholder="name@company.com" autoComplete="email" error={err('adminEmail')} />
+              <FormInput label="Username" name="adminUsername" value={formData.adminUsername} onChange={handleInputChange} placeholder="e.g. rita" autoComplete="username" error={err('adminUsername')} />
+              <FormInput label="Mobile number" name="adminPhone" type="tel" value={formData.adminPhone} onChange={handleInputChange} placeholder="+91 98765 43210" autoComplete="tel" error={err('adminPhone')} />
+              <FormInput label="Password" name="adminPassword" type={showPassword ? 'text' : 'password'} value={formData.adminPassword} onChange={handleInputChange} placeholder="Create a password" autoComplete="new-password" error={err('adminPassword')} hint={`At least ${MIN_PASSWORD} characters.`}
+                trailing={<ToggleEye shown={showPassword} onToggle={() => setShowPassword((v) => !v)} />} />
+              <FormInput label="Confirm password" name="adminConfirmPassword" type={showPassword ? 'text' : 'password'} value={formData.adminConfirmPassword} onChange={handleInputChange} placeholder="Re-enter your password" autoComplete="new-password" error={err('adminConfirmPassword')} />
             </div>
           </div>
         );
-      })}
+      case 2:
+        return (
+          <div className="space-y-6">
+            <Heading title="Tell us about your company" sub="Your team will sign in at your own web address." />
+            <FormInput label="Company name" name="companyName" value={formData.companyName} onChange={handleInputChange} placeholder="e.g. Skyline Developers" autoComplete="organization" error={err('companyName')} autoFocus />
+            <div>
+              <label htmlFor="subdomain" className="block text-sm font-medium text-[#202124] mb-1.5">Your sign-in address</label>
+              <div className="flex items-stretch">
+                <input
+                  id="subdomain" name="subdomain" value={formData.subdomain} onChange={handleInputChange} placeholder="your-company"
+                  autoComplete="off" autoCapitalize="none" autoCorrect="off" spellCheck={false}
+                  aria-invalid={!!err('subdomain')} aria-describedby="subdomain-note"
+                  className={`min-w-0 flex-1 h-12 px-4 rounded-l-lg border border-r-0 text-base text-[#202124] placeholder-[#80868b] bg-white focus:outline-none focus:ring-2 ${err('subdomain') ? 'border-[#d93025] focus:ring-[#d93025]/30' : 'border-[#dadce0] focus:border-[#1a73e8] focus:ring-[#1a73e8]/30'}`}
+                />
+                <span className="h-12 px-3 flex items-center rounded-r-lg border border-[#dadce0] bg-[#f1f3f4] text-sm font-medium text-[#5f6368] whitespace-nowrap">{workspaceHostSuffix()}</span>
+              </div>
+              <p id="subdomain-note" aria-live="polite" className={`mt-1.5 text-xs ${subStatus.state === 'ok' ? 'text-[#1e8e3e]' : subStatus.state === 'bad' || err('subdomain') ? 'text-[#d93025]' : 'text-[#5f6368]'}`}>
+                {subStatus.state === 'checking' && 'Checking availability…'}
+                {subStatus.state === 'ok' && <>✓ <b>{address}</b> is available.</>}
+                {subStatus.state === 'bad' && subStatus.reason}
+                {subStatus.state === 'idle' && (err('subdomain') || 'Letters, numbers and hyphens. This is the address your team will use to sign in.')}
+              </p>
+            </div>
+          </div>
+        );
+      case 3:
+        return (
+          <div className="space-y-6">
+            <Heading title="Choose a plan" sub="Pick what fits your team. You won’t be charged today." />
+            <div role="radiogroup" aria-label="Plan" className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {PLANS.map((p) => (
+                <PlanCard key={p.id} title={p.id} tagline={p.tagline} price={p.price} features={p.features} active={formData.plan === p.id}
+                  onClick={() => setFormData((prev) => ({ ...prev, plan: p.id }))} />
+              ))}
+            </div>
+          </div>
+        );
+      default:
+        return (
+          <div className="space-y-6">
+            {status === 'form' && (
+              <>
+                <Heading title="Review and create" sub="Check your details. You can change most of these later in settings." />
+                {serverError && <div role="alert" className="text-sm text-[#d93025] bg-red-50 border border-red-100 rounded-lg p-3">{serverError}</div>}
+                <dl className="bg-[#f8f9fa] p-5 sm:p-6 rounded-xl border border-[#dadce0] space-y-3">
+                  <Row label="Owner" value={`${formData.adminName} · ${formData.adminEmail}`} />
+                  <Row label="Company" value={formData.companyName} />
+                  <Row label="Sign-in address" value={address} />
+                  <Row label="Plan" value={`${plan.id} · ${plan.price}/mo`} />
+                  <Row label="Includes" value={plan.moduleNames.join(', ')} />
+                </dl>
+              </>
+            )}
+            {status === 'creating' && (
+              <div className="py-10 text-center" role="status">
+                <div className="w-12 h-12 mx-auto mb-5 border-4 border-blue-100 border-t-[#1a73e8] rounded-full animate-spin"></div>
+                <h2 className="text-2xl font-medium text-[#202124]">Creating your workspace…</h2>
+                <p className="text-sm text-[#5f6368] mt-2">Setting up <b>{address}</b> with its own private database. This takes a few seconds.</p>
+              </div>
+            )}
+            {status === 'done' && (
+              <div className="py-10 text-center" role="status">
+                <div className="w-16 h-16 mx-auto mb-5 bg-green-50 text-green-600 rounded-full flex items-center justify-center text-2xl"><i className="fas fa-check" aria-hidden="true"></i></div>
+                <h2 className="text-2xl font-medium text-[#202124]">Your workspace is ready</h2>
+                <p className="text-sm text-[#5f6368] mt-2">Taking you to <b>{address}</b>…</p>
+                <a href={builtUrl} className="inline-block mt-4 text-sm font-bold text-[#1a73e8] hover:underline">Not redirected? Continue</a>
+              </div>
+            )}
+          </div>
+        );
+    }
+  };
+
+  const busy = status !== 'form';
+
+  return (
+    <div className="fixed inset-0 bg-[#f1f3f4] flex items-stretch md:items-center justify-center md:p-4 z-[9999] overflow-hidden">
+      <div className="w-full max-w-6xl h-full md:max-h-[800px] bg-white md:rounded-2xl shadow-2xl flex flex-col md:flex-row overflow-hidden">
+        {/* Desktop sidebar */}
+        <aside className="hidden md:flex w-72 bg-[#f8f9fa] p-8 flex-col border-r border-[#dadce0] flex-shrink-0">
+          <div className="mb-10">
+            <div className="flex items-center gap-3 mb-1">
+              <div className="w-8 h-8 bg-[#1a73e8] rounded flex items-center justify-center text-white text-sm shadow-sm"><i className="fas fa-cube" aria-hidden="true"></i></div>
+              <span className="text-2xl font-bold text-[#202124] tracking-tight">RealtySarv</span>
+            </div>
+            <p className="text-xs text-[#5f6368] ml-11">Set up your workspace</p>
+          </div>
+          <VerticalStepper currentStep={step} />
+        </aside>
+
+        {/* Mobile header: compact progress instead of the full stepper */}
+        <header className="md:hidden px-5 pt-4 pb-3 border-b border-[#dadce0] bg-[#f8f9fa]">
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-2 text-lg font-bold text-[#202124]">
+              <span className="w-7 h-7 bg-[#1a73e8] rounded flex items-center justify-center text-white text-xs"><i className="fas fa-cube" aria-hidden="true"></i></span>
+              RealtySarv
+            </span>
+            <span className="text-xs font-medium text-[#5f6368]">Step {step} of {STEPS.length}</span>
+          </div>
+          <p className="mt-2 text-sm font-bold text-[#1a73e8]">{STEPS[step - 1].title}</p>
+          <div className="mt-2 h-1.5 rounded-full bg-[#dadce0] overflow-hidden" aria-hidden="true">
+            <div className="h-full bg-[#1a73e8] transition-all duration-300" style={{ width: `${(step / STEPS.length) * 100}%` }}></div>
+          </div>
+        </header>
+
+        <main className="flex-1 flex flex-col min-w-0 bg-white min-h-0">
+          <form onSubmit={handleNext} noValidate className="flex-1 flex flex-col min-h-0">
+            <div className="flex-1 overflow-y-auto p-5 sm:p-8 md:p-12 custom-scrollbar">
+              <div className="max-w-3xl mx-auto animate-fadeIn">{renderStep()}</div>
+            </div>
+            <div className="px-5 sm:px-8 md:px-12 py-4 border-t border-[#dadce0] flex items-center justify-between gap-3 bg-white">
+              <button type="button" onClick={onGoToLogin} disabled={status === 'creating'} className="min-h-11 px-2 text-sm font-medium text-[#5f6368] hover:text-[#202124] disabled:opacity-50">
+                Exit setup
+              </button>
+              {!busy && (
+                <div className="flex gap-2 sm:gap-3">
+                  {step > 1 && (
+                    <button type="button" onClick={() => goTo(step - 1)} className="min-h-11 px-5 rounded-lg font-bold text-sm text-[#1a73e8] hover:bg-blue-50 transition-colors">Back</button>
+                  )}
+                  <button type="submit" className="min-h-11 px-6 sm:px-8 rounded-lg bg-[#1a73e8] text-white font-bold text-sm shadow hover:bg-[#174ea6] transition-colors">
+                    {step === STEPS.length ? 'Create workspace' : 'Continue'}
+                  </button>
+                </div>
+              )}
+            </div>
+          </form>
+        </main>
+      </div>
     </div>
   );
 };
 
-const InstallationWizard: React.FC<InstallationWizardProps> = ({ onComplete, onGoToLogin }) => {
-    const [step, setStep] = React.useState(1);
-    const [isDeploying, setIsDeploying] = React.useState(false);
-    const [deployLogs, setDeployLogs] = React.useState<string[]>([]);
-    const [formData, setFormData] = React.useState({
-        plan: 'Professional',
-        companyName: '',
-        subdomain: '',
-        adminName: '',
-        adminEmail: '',
-        adminPhone: '',
-        adminUsername: '',
-        adminPassword: '',
-        adminConfirmPassword: '',
-        modules: { crm: true, erp: false }
-    });
-
-    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-        const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
-    };
-
-    const handleNext = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (step < 5) {
-            setStep(step + 1);
-        } else {
-            handleFinalize();
-        }
-    };
-
-    const handleFinalize = () => {
-        if (formData.adminPassword !== formData.adminConfirmPassword) {
-            alert("Passwords do not match!");
-            setStep(1);
-            return;
-        }
-        setIsDeploying(true);
-        setDeployLogs([]);
-
-        let currentLogs: string[] = [];
-        const addLog = (msg: string) => {
-            currentLogs = [...currentLogs, msg];
-            setDeployLogs(currentLogs);
-        };
-
-        const runDeployPipeline = async () => {
-            addLog(`📡 Initiating multi-tenant deployment pipeline for subdomain: "${formData.subdomain || 'company'}"...`);
-            await new Promise(r => setTimeout(r, 450));
-            
-            addLog(`🔍 Resolving domain authority on GoDaddy DNS name resolvers...`);
-            await new Promise(r => setTimeout(r, 450));
-
-            addLog(`🔑 Contacting GoDaddy API Gateway endpoint...`);
-            await new Promise(r => setTimeout(r, 350));
-
-            try {
-                // Try to notify the node express backend to register the CNAME record in GoDaddy
-                const targetSub = formData.subdomain || 'company';
-                
-                addLog(`📡 Sending dynamic record setup to API dispatcher route...`);
-                
-                let res;
-                try {
-                    // Try direct relative route first (Vite proxy/backend integration)
-                    res = await fetch('/api/dns/register', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ subdomain: targetSub, companyName: formData.companyName })
-                    });
-                } catch {
-                    // Fall back to direct Port 4000 express route if not proxied
-                    res = await fetch('http://localhost:4000/api/dns/register', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ subdomain: targetSub, companyName: formData.companyName })
-                    });
-                }
-
-                if (res && res.ok) {
-                    const data = await res.json();
-                    if (data.success) {
-                        if (data.simulated) {
-                            addLog(`🔑 GoDaddy Status: Simulated Success Mode activated.`);
-                            addLog(`✅ API Response: ${data.message}`);
-                        } else {
-                            addLog(`✅ Live GoDaddy Response: DNS Record successfully modified!`);
-                            addLog(`🌏 Dynamic customer maps active: ${targetSub}.${data.domain || 'realtysarv.com'}`);
-                        }
-                    } else {
-                        addLog(`⚠️ GoDaddy Warning: ${data.message || 'Verification failure'}`);
-                    }
-                } else {
-                    addLog(`⚠️ GoDaddy API offline or routing not set. Initializing fallback router...`);
-                    addLog(`✅ Default client route bound automatically: "${targetSub}.realtysarv.com"`);
-                }
-            } catch (error: any) {
-                addLog(`⚠️ Local interface resolver bound correctly: simulated active subdomain path active.`);
-            }
-
-            await new Promise(r => setTimeout(r, 450));
-            addLog(`🔥 Cloud Firestore [SaaS Multi-Tenant Mode]: Connecting to Firebase Cloud project...`);
-            await new Promise(r => setTimeout(r, 400));
-
-            addLog(`📦 Registry Catalog Write: Creating path tenants/${formData.subdomain || 'company'}`);
-            await new Promise(r => setTimeout(r, 400));
-
-            addLog(`💾 Initializing Admin credential structure: "${formData.adminName}"`);
-            await new Promise(r => setTimeout(r, 400));
-
-            addLog(`🎉 SYSTEM LIVE: Purging previous offline session caches and starting RealtySarv engine...`);
-            await new Promise(r => setTimeout(r, 600));
-
-            onComplete({
-                name: formData.adminName,
-                email: formData.adminEmail,
-                phone: formData.adminPhone,
-                username: formData.adminUsername,
-                password: formData.adminPassword,
-                role: 'Admin',
-                assignedProjectIds: [],
-            }, formData.companyName, formData.plan, formData.modules, formData.subdomain);
-        };
-
-        runDeployPipeline();
-    };
-
-    const renderStep = () => {
-        switch (step) {
-            case 1:
-                return (
-                    <div className="space-y-8 animate-fadeIn">
-                        <div>
-                            <h2 className="text-3xl font-medium text-[#202124] mb-2">Admin Identity</h2>
-                            <p className="text-sm text-[#5f6368]">Configure your root administrator credentials for this workspace.</p>
-                        </div>
-                        <div className="grid grid-cols-2 gap-6">
-                            <FormInput label="Full Name" name="adminName" value={formData.adminName} onChange={handleInputChange} placeholder="John Doe" />
-                            <FormInput label="Work Email" name="adminEmail" type="email" value={formData.adminEmail} onChange={handleInputChange} placeholder="admin@company.com" />
-                            <FormInput label="Username" name="adminUsername" value={formData.adminUsername} onChange={handleInputChange} placeholder="admin_root" />
-                            <FormInput label="Mobile" name="adminPhone" value={formData.adminPhone} onChange={handleInputChange} placeholder="+91" />
-                            <FormInput label="Password" name="adminPassword" type="password" value={formData.adminPassword} onChange={handleInputChange} placeholder="••••••••" />
-                            <FormInput label="Confirm Password" name="adminConfirmPassword" type="password" value={formData.adminConfirmPassword} onChange={handleInputChange} placeholder="••••••••" />
-                        </div>
-                    </div>
-                );
-            case 2:
-                return (
-                    <div className="space-y-8 animate-fadeIn">
-                        <div>
-                            <h2 className="text-3xl font-medium text-[#202124] mb-2">Product Modules</h2>
-                            <p className="text-sm text-[#5f6368]">Enable the core services required for your operations.</p>
-                        </div>
-                        <div className="grid grid-cols-1 gap-4">
-                            <ModuleCard 
-                                icon="fas fa-users-rays" 
-                                title="LeadSarv CRM" 
-                                desc="Omnichannel lead capture and sales automation." 
-                                active={formData.modules.crm} 
-                                onClick={() => setFormData(prev => ({...prev, modules: {...prev.modules, crm: !prev.modules.crm}}))} 
-                            />
-                            <ModuleCard 
-                                icon="fas fa-hard-hat" 
-                                title="ProjectSarv ERP" 
-                                desc="Construction site operations and procurement tracking." 
-                                active={formData.modules.erp} 
-                                onClick={() => setFormData(prev => ({...prev, modules: {...prev.modules, erp: !prev.modules.erp}}))} 
-                            />
-                        </div>
-                    </div>
-                );
-            case 3:
-                return (
-                    <div className="space-y-8 animate-fadeIn">
-                        <div>
-                            <h2 className="text-3xl font-medium text-[#202124] mb-2">Workspace Metadata</h2>
-                            <p className="text-sm text-[#5f6368]">Identify your organization's unique digital footprint.</p>
-                        </div>
-                        <div className="space-y-6">
-                            <FormInput label="Organization Name" name="companyName" value={formData.companyName} onChange={handleInputChange} placeholder="e.g. Skyline Developers" />
-                            <div>
-                                <label className="block text-xs font-bold text-[#5f6368] uppercase mb-2 tracking-wider">Access Subdomain</label>
-                                <div className="relative flex items-center">
-                                    <i className="fas fa-globe absolute left-4 text-gray-400"></i>
-                                    <input name="subdomain" value={formData.subdomain} onChange={handleInputChange} placeholder="company-name" className="w-full p-3 pl-11 rounded-l-lg border-b-2 text-sm text-slate-900 bg-[#f1f3f4] border-transparent focus:border-[#1a73e8] outline-none transition-all" />
-                                    <div className="bg-[#dadce0] px-4 py-3 text-xs font-bold text-gray-600 rounded-r-lg border-b-2 border-transparent">.realtysarv.com</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                );
-            case 4:
-                return (
-                    <div className="space-y-8 animate-fadeIn">
-                        <div>
-                            <h2 className="text-3xl font-medium text-[#202124] mb-2">Select Your Tier</h2>
-                            <p className="text-sm text-[#5f6368]">Choose the usage plan that fits your current team size.</p>
-                        </div>
-                        <div className="grid grid-cols-2 gap-6">
-                            <PlanCard 
-                                title="Professional" 
-                                price="₹3,999" 
-                                features={['10 Active Users', 'CRM Hub Only', 'Email Sync']} 
-                                active={formData.plan === 'Professional'}
-                                onClick={() => setFormData(prev => ({...prev, plan: 'Professional'}))}
-                            />
-                            <PlanCard 
-                                title="Ultimate" 
-                                price="₹6,999" 
-                                features={['Unlimited Users', 'Full CRM + ERP', 'Priority Support']} 
-                                active={formData.plan === 'Ultimate'}
-                                onClick={() => setFormData(prev => ({...prev, plan: 'Ultimate'}))}
-                            />
-                        </div>
-                    </div>
-                );
-            case 5:
-                return (
-                    <div className="space-y-6 animate-fadeIn text-center py-6">
-                        {isDeploying ? (
-                            <div className="space-y-4 max-w-2xl mx-auto">
-                                <div className="flex items-center gap-3 justify-center mb-2">
-                                    <div className="w-10 h-10 border-4 border-blue-100 border-t-[#1a73e8] rounded-full animate-spin"></div>
-                                    <div className="text-left">
-                                        <h2 className="text-xl font-bold text-[#202124]">Provisioning New Tenant Stack...</h2>
-                                        <p className="text-xs text-[#5f6368]">Setting up dedicated cloud subdomain routing & isolated customer catalogs.</p>
-                                    </div>
-                                </div>
-
-                                {/* Terminal Console View */}
-                                <div className="bg-[#18191e] rounded-xl border border-gray-800 shadow-2xl overflow-hidden text-left">
-                                    {/* Terminal Header */}
-                                    <div className="bg-[#21232a] px-4 py-2 flex items-center justify-between border-b border-gray-800 select-none">
-                                        <div className="flex items-center gap-2">
-                                            <span className="w-3 h-3 rounded-full bg-[#ff5f56]"></span>
-                                            <span className="w-3 h-3 rounded-full bg-[#ffbd2e]"></span>
-                                            <span className="w-3 h-3 rounded-full bg-[#27c93f]"></span>
-                                        </div>
-                                        <span className="text-[10px] font-bold font-mono text-gray-500 uppercase tracking-widest">realtysarv-deploy-service.sh</span>
-                                        <div className="w-10"></div>
-                                    </div>
-
-                                    {/* Terminal Log Output */}
-                                    <div className="p-4 font-mono text-[11px] leading-relaxed text-slate-300 max-h-56 overflow-y-auto custom-scrollbar space-y-1.5 h-56 bg-[#121317]">
-                                        {deployLogs.map((log, i) => {
-                                            let color = "text-slate-300";
-                                            if (log && typeof log === 'string') {
-                                                if (log.startsWith("✅") || log.startsWith("🎉")) color = "text-emerald-400 font-bold";
-                                                else if (log.startsWith("📡") || log.startsWith("📝")) color = "text-blue-400";
-                                                else if (log.startsWith("🔥") || log.startsWith("📦")) color = "text-orange-400";
-                                                else if (log.startsWith("🔍") || log.startsWith("🔑")) color = "text-amber-300";
-                                            }
-                                            return (
-                                                <div key={i} className={`${color} border-l-2 border-transparent pl-2 hover:bg-white/5 py-0.5 rounded transition-all`}>
-                                                    {log || ''}
-                                                </div>
-                                            );
-                                        })}
-                                        {deployLogs.length > 0 && (
-                                            <div className="animate-pulse inline-block w-2 h-3 bg-blue-500 ml-1"></div>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="space-y-6">
-                                <div className="w-20 h-20 bg-green-50 text-green-600 rounded-full flex items-center justify-center text-3xl mx-auto shadow-inner">
-                                    <i className="fas fa-check-double"></i>
-                                </div>
-                                <div>
-                                    <h2 className="text-3xl font-medium text-[#202124]">Ready to Deploy</h2>
-                                    <p className="text-sm text-[#5f6368] mt-2 max-w-md mx-auto">Confirm your details to finalize the installation. Your root administrator account will be created immediately.</p>
-                                </div>
-                                <div className="bg-[#f8f9fa] p-6 rounded-xl border border-[#dadce0] text-left max-w-lg mx-auto">
-                                    <p className="text-xs text-[#5f6368] uppercase font-bold tracking-wider mb-4">Summary</p>
-                                    <div className="space-y-2">
-                                        <div className="flex justify-between"><span className="text-xs text-gray-500">Admin</span><span className="text-sm font-bold">{formData.adminName}</span></div>
-                                        <div className="flex justify-between"><span className="text-xs text-gray-500">Company</span><span className="text-sm font-bold">{formData.companyName}</span></div>
-                                        <div className="flex justify-between"><span className="text-xs text-gray-500">Plan</span><span className="text-sm font-bold text-blue-600">{formData.plan}</span></div>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                );
-            default:
-                return null;
-        }
-    };
-
-    return (
-        <div className="fixed inset-0 bg-[#f1f3f4] flex items-center justify-center p-4 z-[9999] overflow-hidden">
-            <div className="w-full max-w-6xl h-full max-h-[800px] bg-white rounded-2xl shadow-2xl flex flex-col md:flex-row overflow-hidden">
-                {/* Sidebar */}
-                <div className="w-full md:w-80 bg-[#f8f9fa] p-8 flex flex-col border-r border-[#dadce0] flex-shrink-0">
-                    <div className="mb-12">
-                        <div className="flex items-center gap-3 mb-1">
-                            <div className="w-8 h-8 bg-[#1a73e8] rounded flex items-center justify-center text-white text-sm shadow-sm"><i className="fas fa-cube"></i></div>
-                            <h1 className="text-2xl font-bold text-[#202124] tracking-tight">RealtySarv</h1>
-                        </div>
-                        <p className="text-[10px] text-[#5f6368] font-bold uppercase tracking-wider ml-11">Enterprise Console</p>
-                    </div>
-                    <VerticalStepper currentStep={step} />
-                    <div className="mt-auto pt-6 border-t border-[#dadce0] text-[10px] text-gray-400 font-bold uppercase tracking-widest text-center">
-                        Build: v2.4.1-stable
-                    </div>
-                </div>
-
-                {/* Main Content Area */}
-                <div className="flex-1 flex flex-col min-w-0 bg-white relative">
-                    <div className="flex-1 overflow-y-auto p-12 md:p-16 custom-scrollbar">
-                        <form onSubmit={handleNext} className="max-w-3xl mx-auto h-full flex flex-col">
-                            <div className="flex-1">
-                                {renderStep()}
-                            </div>
-                            <div className="mt-auto pt-10 flex justify-between items-center border-t border-[#dadce0]">
-                                <button type="button" onClick={onGoToLogin} className="text-sm font-bold text-[#5f6368] hover:text-[#202124] uppercase tracking-wider transition-colors">
-                                    Exit Wizard
-                                </button>
-                                <div className="flex gap-4">
-                                    {step > 1 && !isDeploying && (
-                                        <button type="button" onClick={() => setStep(step - 1)} className="px-8 py-2.5 rounded font-bold text-sm text-[#1a73e8] hover:bg-blue-50 transition-all">
-                                            BACK
-                                        </button>
-                                    )}
-                                    {!isDeploying && (
-                                        <button type="submit" className="px-10 py-2.5 rounded bg-[#1a73e8] text-white font-bold text-sm shadow-lg hover:bg-[#174ea6] transition-all transform active:scale-95">
-                                            {step === 5 ? 'FINALIZE & DEPLOY' : 'CONTINUE'}
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-const FormInput: React.FC<{label: string, name: string, value: string, onChange: any, placeholder: string, type?: string}> = 
-({ label, name, value, onChange, placeholder, type = 'text' }) => (
-    <div className="w-full">
-        <label className="block text-xs font-bold text-[#5f6368] uppercase mb-2 tracking-wider">{label}</label>
-        <input 
-            type={type}
-            name={name} 
-            value={value} 
-            onChange={onChange} 
-            required
-            placeholder={placeholder} 
-            className="w-full p-3 rounded-lg border-b-2 text-sm text-slate-900 bg-[#f1f3f4] border-transparent focus:border-[#1a73e8] focus:bg-white outline-none transition-all placeholder:text-gray-400" 
-        />
-    </div>
+const Heading: React.FC<{ title: string; sub: string }> = ({ title, sub }) => (
+  <div>
+    <h1 className="text-2xl sm:text-3xl font-medium text-[#202124] mb-2">{title}</h1>
+    <p className="text-sm text-[#5f6368]">{sub}</p>
+  </div>
 );
 
-const ModuleCard: React.FC<{ icon: string, title: string, desc: string, active: boolean, onClick: () => void }> = 
-({ icon, title, desc, active, onClick }) => (
-    <div 
-        onClick={onClick}
-        className={`p-5 rounded-xl border-2 transition-all cursor-pointer flex items-center gap-6 ${active ? 'border-[#1a73e8] bg-blue-50/30 shadow-md' : 'border-[#dadce0] hover:border-[#1a73e8]'}`}
-    >
-        <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-xl ${active ? 'bg-[#1a73e8] text-white' : 'bg-[#f1f3f4] text-gray-400'}`}>
-            <i className={icon}></i>
-        </div>
-        <div className="flex-1">
-            <h4 className="font-bold text-[#202124]">{title}</h4>
-            <p className="text-xs text-[#5f6368]">{desc}</p>
-        </div>
-        <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${active ? 'bg-[#1a73e8] border-[#1a73e8] text-white' : 'border-[#dadce0]'}`}>
-            {active && <i className="fas fa-check text-[10px]"></i>}
-        </div>
-    </div>
+const Row: React.FC<{ label: string; value: string }> = ({ label, value }) => (
+  <div className="flex flex-col sm:flex-row sm:justify-between gap-0.5 sm:gap-4">
+    <dt className="text-xs text-gray-500">{label}</dt>
+    <dd className="text-sm font-bold text-[#202124] sm:text-right break-words">{value}</dd>
+  </div>
 );
 
-const PlanCard: React.FC<{ title: string, price: string, features: string[], active: boolean, onClick: () => void }> = 
-({ title, price, features, active, onClick }) => (
-    <div 
-        onClick={onClick}
-        className={`p-6 rounded-xl border-2 transition-all cursor-pointer flex flex-col ${active ? 'border-[#1a73e8] bg-blue-50/30 shadow-md ring-4 ring-[#1a73e8]/5' : 'border-[#dadce0] hover:border-[#1a73e8]'}`}
-    >
-        <h4 className="font-bold text-xs uppercase tracking-wider text-gray-500 mb-2">{title}</h4>
-        <div className="text-3xl font-medium text-[#202124] mb-6">{price}<span className="text-xs text-gray-400 font-bold ml-1">/mo</span></div>
-        <ul className="space-y-3 mb-8 flex-1">
-            {features.map(f => (
-                <li key={f} className="text-xs text-[#5f6368] flex items-center gap-2">
-                    <i className="fas fa-check text-blue-500"></i> {f}
-                </li>
-            ))}
-        </ul>
-        <div className={`w-full py-2 text-center rounded text-xs font-bold uppercase tracking-widest ${active ? 'bg-[#1a73e8] text-white' : 'bg-[#f1f3f4] text-gray-500'}`}>
-            {active ? 'Selected' : 'Choose Plan'}
-        </div>
+const ToggleEye: React.FC<{ shown: boolean; onToggle: () => void }> = ({ shown, onToggle }) => (
+  <button type="button" onClick={onToggle} aria-label={shown ? 'Hide password' : 'Show password'} aria-pressed={shown}
+    className="absolute right-1 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center text-[#5f6368] hover:text-[#202124] rounded-lg">
+    <i className={`fas ${shown ? 'fa-eye-slash' : 'fa-eye'}`} aria-hidden="true"></i>
+  </button>
+);
+
+const FormInput: React.FC<{
+  label: string; name: string; value: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; placeholder: string;
+  type?: string; autoComplete?: string; error?: string; hint?: string; autoFocus?: boolean; trailing?: React.ReactNode;
+}> = ({ label, name, value, onChange, placeholder, type = 'text', autoComplete, error, hint, autoFocus, trailing }) => (
+  <div className="w-full">
+    <label htmlFor={name} className="block text-sm font-medium text-[#202124] mb-1.5">{label}</label>
+    <div className="relative">
+      <input
+        id={name} name={name} type={type} value={value} onChange={onChange} placeholder={placeholder} autoComplete={autoComplete} autoFocus={autoFocus}
+        aria-invalid={!!error} aria-describedby={error ? `${name}-err` : undefined}
+        className={`w-full h-12 px-4 ${trailing ? 'pr-12' : ''} rounded-lg border text-base text-[#202124] placeholder-[#80868b] bg-white focus:outline-none focus:ring-2 transition-colors ${error ? 'border-[#d93025] focus:ring-[#d93025]/30' : 'border-[#dadce0] focus:border-[#1a73e8] focus:ring-[#1a73e8]/30'}`}
+      />
+      {trailing}
     </div>
+    {error && <p id={`${name}-err`} className="mt-1.5 text-xs text-[#d93025] flex items-center gap-1.5"><i className="fas fa-exclamation-circle" aria-hidden="true"></i>{error}</p>}
+    {!error && hint && <p className="mt-1.5 text-xs text-[#5f6368]">{hint}</p>}
+  </div>
+);
+
+const PlanCard: React.FC<{ title: string; tagline: string; price: string; features: string[]; active: boolean; onClick: () => void }> = ({ title, tagline, price, features, active, onClick }) => (
+  <button
+    type="button" role="radio" aria-checked={active} onClick={onClick}
+    className={`text-left p-5 sm:p-6 rounded-xl border-2 transition-all flex flex-col ${active ? 'border-[#1a73e8] bg-blue-50/40 shadow-md ring-4 ring-[#1a73e8]/10' : 'border-[#dadce0] hover:border-[#1a73e8]/50'}`}
+  >
+    <div className="flex items-start justify-between gap-3">
+      <div>
+        <h2 className="font-bold text-lg text-[#202124]">{title}</h2>
+        <p className="text-xs text-[#5f6368] mt-0.5">{tagline}</p>
+      </div>
+      <span className={`w-6 h-6 shrink-0 rounded-full border-2 flex items-center justify-center ${active ? 'bg-[#1a73e8] border-[#1a73e8] text-white' : 'border-[#dadce0]'}`}>
+        {active && <i className="fas fa-check text-[10px]" aria-hidden="true"></i>}
+      </span>
+    </div>
+    <div className="text-3xl font-medium text-[#202124] my-4">{price}<span className="text-xs text-gray-500 font-medium ml-1">/month</span></div>
+    <ul className="space-y-2.5">
+      {features.map((f) => (
+        <li key={f} className="text-sm text-[#5f6368] flex items-start gap-2"><i className="fas fa-check text-blue-500 mt-1 text-xs" aria-hidden="true"></i><span>{f}</span></li>
+      ))}
+    </ul>
+  </button>
 );
 
 export default InstallationWizard;

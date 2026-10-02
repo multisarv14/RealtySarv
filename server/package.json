@@ -1,31 +1,37 @@
 {
-  "name": "leadsarv-server",
+  "name": "realtysarv-server",
   "version": "1.0.0",
-  "description": "Backend server for LeadSarv CRM",
-  "main": "dist/index.js",
+  "description": "RealtySarv API (Express + MongoDB)",
+  "main": "dist/server/src/index.js",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/index.js",
-    "dev": "nodemon --watch 'src/**/*.ts' --exec 'ts-node' src/index.ts",
-    "db:setup": "ts-node src/db/setup.ts"
+    "start": "node dist/server/src/index.js",
+    "dev": "tsx watch src/index.ts",
+    "seed": "tsx src/seed.ts",
+    "seed:reset": "tsx src/seed.ts --reset",
+    "typecheck": "tsc --noEmit"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
-    "mysql2": "^3.10.0",
-    "uuid": "^9.0.1"
+    "express-async-errors": "^3.1.1",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^9.10.3"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
-    "@types/node": "^2.12.12",
-    "@types/uuid": "^9.0.8",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^22.14.0",
     "nodemon": "^3.1.0",
     "ts-node": "^10.9.2",
+    "tsx": "^4.23.15",
     "typescript": "^5.4.5"
   }
 }

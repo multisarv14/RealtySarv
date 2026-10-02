@@ -11,7 +11,8 @@ export default defineConfig(({ mode }) => {
         proxy: {
           '/api': {
             target: 'http://localhost:4000',
-            changeOrigin: true,
+            // keep the browser's Host (acme.localhost:3000) so the API can tell which company is calling
+            changeOrigin: false,
             secure: false
           }
         }

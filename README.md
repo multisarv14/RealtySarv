@@ -1,4 +1,41 @@
-# RealtySarv Enterprise Console - Installation & Local Setup Guide
+# RealtySarv Enterprise Console
+
+**Stack:** React (Vite) · Node/Express · MongoDB. **Multi-tenant:** every client company gets its own address
+(`acme.realtysarv.com`) and its own database (`rs_acme`).
+
+## How it works
+- The main site (`realtysarv.com`) has the landing page, the **Get started** install wizard and **Sign in → find your workspace**.
+- The wizard creates a company: a row in the master registry (`realtysarv_master.tenants`), a new database `rs_<subdomain>`,
+  the owner's Admin account and the starter master data. The owner is then sent to `https://<subdomain>.realtysarv.com`.
+- Clients and their team sign in **only on their company address**. The owner adds the team in Admin → Users.
+  Self-signup is off (`ALLOW_SELF_SIGNUP=false`).
+- The API picks the company from the `Host` header. A login token is bound to one company and is rejected on any other.
+
+## Run locally
+```bash
+npm install && npm --prefix server install
+npm run db:up                          # MongoDB in Docker (or set MONGODB_URI to Atlas)
+cp server/.env.example server/.env     # set JWT_SECRET (openssl rand -hex 32)
+npm run db:seed                        # creates the demo company "multisarv" (login ss / sss)
+npm run server                         # API on :4000
+npm run dev                            # frontend on :3000
+```
+Open **http://localhost:3000** (main site) or **http://multisarv.localhost:3000** (demo company).
+`*.localhost` resolves to your machine automatically, so any new company works at `http://<subdomain>.localhost:3000`.
+`npm --prefix server run seed:reset` rebuilds the demo company.
+
+## Go live on your domain (GoDaddy)
+1. Host the API + built frontend on a server with a public IP (VPS, Render, Fly, AWS...). `npm run build`, then serve `dist/`
+   and proxy `/api` to the Node server.
+2. In GoDaddy DNS add **two A records** pointing at that IP: `@` and `*` (the wildcard serves every client; you never create
+   a record per client).
+3. Get a **wildcard HTTPS certificate** for `*.realtysarv.com`. Caddy does this automatically (needs a DNS-01 provider plugin), or use
+   Cloudflare in front, or certbot with a DNS challenge.
+4. The proxy **must forward the original Host header** (the API reads it). nginx: `proxy_set_header Host $host;`
+5. Set `BASE_DOMAIN=realtysarv.com`, `MONGODB_URI`, `JWT_SECRET` in `server/.env` and `VITE_BASE_DOMAIN=realtysarv.com` at build time.
+
+`npm --prefix server run seed:reset` wipes and rebuilds only the demo company. The old IndexedDB (Dexie) and Firebase layers are gone.
+
 
 English and Hindi instructions below to help you set up and run this full-stack application on your computer, and push it to GitHub!
 

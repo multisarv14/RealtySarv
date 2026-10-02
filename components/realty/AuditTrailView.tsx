@@ -2,7 +2,7 @@
 import React from 'react';
 import { AuditTrail } from '../../types';
 import { db } from '../../db';
-import { useLiveQuery } from 'dexie-react-hooks';
+import { useLiveQuery } from '../../liveQuery';
 
 const AuditTrailView: React.FC = () => {
   const logs = useLiveQuery(() => db.auditTrails.orderBy('timestamp').reverse().toArray(), []);

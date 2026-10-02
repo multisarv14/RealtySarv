@@ -2,7 +2,7 @@
 import React from 'react';
 import { NewProjectData, ProjectStatus, ProjectType, FormFieldConfig } from '../../types';
 import DynamicFieldRenderer from '../DynamicFieldRenderer';
-import { useLiveQuery } from 'dexie-react-hooks';
+import { useLiveQuery } from '../../liveQuery';
 import { db } from '../../db';
 
 interface NewProjectModalProps {

@@ -2,7 +2,7 @@
 import React from 'react';
 import { Project, Vendor, PurchaseOrder, WorkOrder, CostBudget, BOQ, BOQItem, MaterialMaster } from '../../types';
 import { db } from '../../db';
-import { useLiveQuery } from 'dexie-react-hooks';
+import { useLiveQuery } from '../../liveQuery';
 
 interface ReportsDashboardProps {
   projects: Project[];
