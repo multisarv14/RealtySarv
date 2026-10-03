@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { callNumber, openWhatsApp } from './leadUi';
+import { PIPELINE_STEPS, callNumber, getNextAction, getPipelineStep, openWhatsApp, urgencyClass } from './leadUi';
 import { Lead, TaskStatus, TaskPriority, AgreementStatus, BookingStatus, PossessionStatus, LifecycleStage, LeadLifecycleStatus, LeadStatus, User } from '../types';
 import Avatar from './Avatar';
 
@@ -11,6 +11,8 @@ interface LeadDetailProps {
   onRemovePropertyImage: (leadId: string, imageId: string) => void;
   onUpdateLeadLifecycle: (leadId: string, stage: LifecycleStage, newStatus: LeadLifecycleStatus) => void;
   onUpdateLeadOwner: (leadId: string, ownerId: string) => void;
+  /** Changing the owner needs the Transfer permission. */
+  canTransfer?: boolean;
   onToggleEditLeadModal: (lead: Lead) => void;
 }
 
@@ -40,47 +42,13 @@ const LifecycleStatusItem: React.FC<{
   </div>
 );
 
-const LeadScoreGauge: React.FC<{ score: number }> = ({ score }) => {
-    const radius = 32;
-    const circumference = 2 * Math.PI * radius;
-    const offset = circumference - (score / 100) * circumference;
-    
-    let color = 'text-red-500';
-    let text = 'Cold';
-    if (score >= 70) { color = 'text-green-500'; text = 'Hot'; }
-    else if (score >= 40) { color = 'text-yellow-500'; text = 'Warm'; }
 
-    return (
-        <div className="relative flex flex-col items-center">
-             <div className="relative w-20 h-20">
-                 <svg className="w-full h-full transform -rotate-90">
-                     <circle className="text-[var(--light-bg)]" strokeWidth="6" stroke="currentColor" fill="transparent" r={radius} cx="40" cy="40" />
-                     <circle className={`${color} transition-all duration-1000 ease-out`} strokeWidth="6" strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round" stroke="currentColor" fill="transparent" r={radius} cx="40" cy="40" />
-                 </svg>
-                 <div className="absolute inset-0 flex items-center justify-center flex-col">
-                     <span className={`text-xl font-bold ${color}`}>{score}</span>
-                 </div>
-             </div>
-             <span className={`text-[10px] font-bold uppercase tracking-wider mt-1 ${color}`}>{text}</span>
-        </div>
-    );
-};
-
-const LeadDetail: React.FC<LeadDetailProps> = ({ lead, users, onAddPropertyImage, onRemovePropertyImage, onUpdateLeadLifecycle, onUpdateLeadOwner, onToggleEditLeadModal }) => {
+const LeadDetail: React.FC<LeadDetailProps> = ({ canTransfer = true, lead, users, onAddPropertyImage, onRemovePropertyImage, onUpdateLeadLifecycle, onUpdateLeadOwner, onToggleEditLeadModal }) => {
   if (!lead) return <div className="p-10 text-center opacity-50">No lead selected.</div>;
 
-  const leadScore = React.useMemo(() => {
-      let score = 20; 
-      if (lead.email) score += 10;
-      if (lead.phone) score += 10;
-      if (lead.budget) score += 10;
-      if (lead.leadStatus === 'Qualified') score += 20;
-      if (lead.leadStatus === 'Converted') score = 100;
-      if ((lead.siteVisits || []).length > 0) score += 15;
-      return Math.min(score, 100);
-  }, [lead]);
-  
-  const nextAction = leadScore > 80 ? "Close deal." : leadScore > 60 ? "Site visit." : "Qualify.";
+  const step = getPipelineStep(lead);
+  const next = getNextAction(lead);
+  const nextText = next ? next.label : step >= 3 ? `Agreement ${lead.agreementStatus} · Possession ${lead.possessionStatus}` : 'No follow-up or visit is scheduled';
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -136,17 +104,21 @@ const LeadDetail: React.FC<LeadDetailProps> = ({ lead, users, onAddPropertyImage
                       </div>
                       <div className="flex items-center gap-3 text-xs text-[var(--text-primary)]">
                         <i className="fas fa-user-tag w-4 text-[var(--primary-color)]"></i>
-                        <select value={lead.ownerId} onChange={(e) => onUpdateLeadOwner(lead.id, e.target.value)} className="bg-transparent text-xs border-none p-0 focus:ring-0 cursor-pointer text-blue-500 font-bold hover:underline">
+                        <select value={lead.ownerId} disabled={!canTransfer} title={canTransfer ? undefined : 'Only people with the Transfer permission can change the owner.'} onChange={(e) => onUpdateLeadOwner(lead.id, e.target.value)} className="bg-transparent text-xs border-none p-0 focus:ring-0 cursor-pointer text-blue-500 font-bold hover:underline">
                             {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
                         </select>
                       </div>
                   </div>
                   
-                  <div className="bg-[var(--dark-bg)] p-4 rounded-xl border border-[var(--border-color)] flex items-center justify-around">
-                      <LeadScoreGauge score={leadScore} />
-                      <div className="text-center">
-                          <p className="text-[9px] font-bold text-[var(--text-secondary)] uppercase">Recommendation</p>
-                          <p className="text-xs font-bold text-[var(--text-primary)] mt-1">{nextAction}</p>
+                  <div className="bg-[var(--dark-bg)] p-4 rounded-xl border border-[var(--border-color)]" aria-label="Journey">
+                      <p className="text-[9px] font-bold text-[var(--text-secondary)] uppercase mb-3">Journey</p>
+                      <div className="flex gap-1" role="img" aria-label={`Step ${step + 1} of ${PIPELINE_STEPS.length}: ${PIPELINE_STEPS[step]}`}>
+                        {PIPELINE_STEPS.map((label, i) => <span key={label} title={label} className={`h-1.5 flex-1 rounded-full ${i <= step ? 'bg-[var(--primary-color)]' : 'bg-[var(--light-bg)]'}`}></span>)}
+                      </div>
+                      <p className="mt-2 text-sm font-bold text-[var(--text-primary)]">{PIPELINE_STEPS[step]} <span className="text-xs font-normal text-[var(--text-secondary)]">· step {step + 1} of {PIPELINE_STEPS.length}</span></p>
+                      <div className="mt-3 pt-3 border-t border-[var(--border-color)]">
+                        <p className="text-[9px] font-bold text-[var(--text-secondary)] uppercase">Next step</p>
+                        <p className={`mt-1 inline-block text-xs font-semibold ${next ? `px-2 py-0.5 rounded-full border ${urgencyClass[next.urgency]}` : 'text-[var(--text-primary)]'}`}>{nextText}</p>
                       </div>
                   </div>
               </div>

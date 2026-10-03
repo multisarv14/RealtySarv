@@ -232,3 +232,56 @@ describe('demo data', () => {
     assert.ok(projects.every((p) => p.inventory.some((u) => u.status === 'Booked')));
   });
 });
+
+describe('server-side access (not only hidden buttons)', () => {
+  let admin, sales;
+  const lead = (id, owner, project = 'The Grand Towers') => ({ id, name: 'Qa Access ' + id, avatarInitials: 'QA', lastMessage: 'x', time: '10:00', chatStatus: 'offline', leadStatus: 'New', read: true, messages: [], email: id + '@qa.test', phone: '+91 90000 77700', initialInterest: [], siteVisits: [], tasks: [], channelSource: 'Digital Marketing', leadSource: 'Website', preferredLocation: 'x', propertyImages: [], ownerId: owner, leadProject: project, leadDate: '2026-10-01', bookingStatus: 'Pending', agreementStatus: 'Drafted', possessionStatus: 'Pending' });
+  const put = (path, token, body) => call(path, { method: 'PUT', host: H, token, body });
+  before(async () => { admin = await adminToken(); sales = await login(DEMO, 'aarav', 'sss'); });
+
+  test('Sales can read settings but not change them', async () => {
+    assert.equal((await call('/sources', { host: H, token: sales })).status, 200);
+    for (const [path, body] of [['/sources/qa-x', { id: 'qa-x', channelSource: 'X', name: 'X' }], ['/userRoleSettings/role-Sales', { id: 'role-Sales', name: 'Sales', menuAccess: ['Leads', 'Transfer', 'Admin'] }], ['/channelPartners/qa-cp', { id: 'qa-cp', firmName: 'X' }], ['/distributionRules/qa-r', { id: 'qa-r' }]]) {
+      const r = await put(path, sales, body);
+      if (path.startsWith('/distributionRules')) assert.equal(r.status, 200, 'rule pointers are updated when a lead is added, so Sales may write them');
+      else assert.equal(r.status, 403, path);
+    }
+    await call('/distributionRules/qa-r', { method: 'DELETE', host: H, token: admin });
+  });
+  test('Sales can add a lead, but cannot move a lead to another owner or project', async () => {
+    assert.equal((await put('/leads/qa-acc1', sales, lead('qa-acc1', 'user-2'))).status, 200);
+    assert.equal((await put('/leads/qa-acc1', sales, { ...lead('qa-acc1', 'user-2'), name: 'Renamed' })).status, 200, 'editing is fine');
+    assert.equal((await put('/leads/qa-acc1', sales, lead('qa-acc1', 'user-3'))).status, 403, 'new owner');
+    assert.equal((await put('/leads/qa-acc1', sales, lead('qa-acc1', 'user-2', 'Serene Gardens'))).status, 403, 'new project');
+    assert.equal((await call('/leads/bulk', { method: 'PUT', host: H, token: sales, body: [lead('qa-acc1', 'user-4')] })).status, 403, 'bulk too');
+    assert.equal((await put('/leads/qa-acc1', admin, lead('qa-acc1', 'user-3'))).status, 200, 'Admin can');
+  });
+  test('the Transfer permission in Roles & access is what allows it', async () => {
+    const roleDoc = (menus) => ({ id: 'role-Sales', name: 'Sales', menuAccess: menus });
+    assert.equal((await put('/userRoleSettings/role-Sales', admin, roleDoc(['Leads', 'Visits', 'Booking', 'Agreement', 'Possession', 'ProjectSarv', 'FinanceSarv', 'Transfer']))).status, 200);
+    assert.equal((await put('/leads/qa-acc1', sales, lead('qa-acc1', 'user-5'))).status, 200, 'allowed once granted');
+    await call('/userRoleSettings/role-Sales', { method: 'DELETE', host: H, token: admin });
+    assert.equal((await put('/leads/qa-acc1', sales, lead('qa-acc1', 'user-2'))).status, 403, 'and blocked again when it is removed');
+  });
+  test('a role without ProjectSarv or FinanceSarv cannot read their data', async () => {
+    assert.equal((await call('/vendors', { host: H, token: sales })).status, 200, 'by default every role has them');
+    await put('/userRoleSettings/role-Sales', admin, { id: 'role-Sales', name: 'Sales', menuAccess: ['Leads'] });
+    assert.equal((await call('/vendors', { host: H, token: sales })).status, 403);
+    await call('/userRoleSettings/role-Sales', { method: 'DELETE', host: H, token: admin });
+  });
+  test('a deactivated user loses the old session at once, and a role change applies at once', async () => {
+    const t = await login(DEMO, 'sneha', 'sss');
+    assert.equal((await call('/leads?limit=1', { host: H, token: t })).status, 200);
+    const sneha = (await call('/users/user-5', { host: H, token: admin })).body;
+    assert.equal((await put('/users/user-5', admin, { ...sneha, isActive: false })).status, 200);
+    assert.equal((await call('/leads?limit=1', { host: H, token: t })).status, 401, 'old token stops working');
+    await put('/users/user-5', admin, { ...sneha, isActive: true, role: 'Sales' });
+    assert.equal((await call('/leads?limit=1', { host: H, token: t })).status, 200, 'and works again when reactivated');
+    await put('/users/user-5', admin, { ...sneha, role: 'Admin' });
+    assert.equal((await put('/sources/qa-y', t, { id: 'qa-y', channelSource: 'Y', name: 'Y' })).status, 200, 'promoted at once (the token still says Sales)');
+    await call('/sources/qa-y', { method: 'DELETE', host: H, token: admin });
+    await put('/users/user-5', admin, { ...sneha, role: 'Sales' });
+    assert.equal((await put('/sources/qa-z', t, { id: 'qa-z', channelSource: 'Z', name: 'Z' })).status, 403, 'demoted at once');
+  });
+  test('clean up', async () => { await call('/leads/qa-acc1', { method: 'DELETE', host: H, token: admin }); });
+});

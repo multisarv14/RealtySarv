@@ -195,6 +195,17 @@ describe('CRM: lists, groups, agenda and privacy (read-only)', () => {
     assert.match(head, /Lead ID LD-[0-9A-Z]{6}/); assert.match(head, /Customer ID CU-[0-9A-Z]{6}/);
     assert.equal(/\d{5}\s?\d{5}/.test(head), false, 'no mobile number in the header');
   });
+  test('Timeline: one dated history plus what is still to do; Details: a real journey, no made-up score', async () => {
+    await menu(p, MENU.booking); await tab(p, 'Confirmed'); await p.locator('[role=button][tabindex="0"]').first().click(); await p.waitForTimeout(500);
+    await tab(p, 'Timeline');
+    const tl = await p.getByTestId('lead-timeline').innerText();
+    assert.match(tl, /STILL TO DO/i); assert.match(tl, /WHAT HAS HAPPENED/i);
+    assert.match(tl, /Enquiry received/); assert.match(tl, /Token received ₹/); assert.match(tl, /Payment ₹/);
+    await tab(p, 'Details');
+    const d = await p.locator('body').innerText();
+    assert.match(d, /Journey/i); assert.match(d, /Next step/i); assert.match(d, /step \d of 6/);
+    assert.doesNotMatch(d, /Recommendation|Close deal|\bHOT\b/i, 'no invented lead score');
+  });
   test('Visits / Booking / Agreement / Possession are all populated', async () => {
     await menu(p, MENU.visits);
     for (const [t, n] of [['Scheduled', 10], ['Pending', 10], ['Completed', 10]]) { await tab(p, t); assert.equal(await rows(p), n, `visits ${t}`); }
@@ -266,7 +277,7 @@ describe('CRM: lists, groups, agenda and privacy (read-only)', () => {
   test('chat bubbles follow the app theme, not the operating system', async () => {
     const dark = await open(); await dark.emulateMedia({ colorScheme: 'light' }); await signIn(dark);
     await dark.locator('[role=button][tabindex="0"]').nth(1).click(); await dark.waitForTimeout(400);
-    const bg = await dark.evaluate(() => getComputedStyle(document.querySelector('div.max-w-\\[75\\%\\]')).backgroundColor);
+    const bg = await dark.evaluate(() => getComputedStyle(document.querySelector('[data-testid=message-bubble]')).backgroundColor);
     assert.equal(bg, 'rgb(32, 44, 51)', 'dark app + light OS still gets dark bubbles'); await dark.context().close();
   });
   test('mobile: chat header, tabs and composer fit the screen', async () => {
@@ -719,5 +730,25 @@ describe('Operations: lead transfer, lead merge and distribution rules', () => {
       assert.equal(made.ownerId, owner, first);
       await call('/leads/' + made.id, { method: 'DELETE', host: H, token: await adminToken() });
     }
+  });
+});
+
+describe('Sales in the app: transfer is not offered without the permission', () => {
+  let p; const H = hostFor(DEMO);
+  before(async () => {
+    // Earlier tests leave almost no leads behind, so bring our own.
+    await call('/leads/qa-sales-view', { method: 'PUT', host: H, token: await adminToken(), body: { id: 'qa-sales-view', name: 'Qa Sales View', avatarInitials: 'QS', lastMessage: 'Hello', time: '10:00', chatStatus: 'offline', leadStatus: 'New', read: true, messages: [], email: 'qa.sales.view@qa.test', phone: '+91 90000 66600', initialInterest: ['2BHK'], siteVisits: [], tasks: [], channelSource: 'Digital Marketing', leadSource: 'Website', preferredLocation: 'Pune', propertyImages: [], ownerId: 'user-2', leadProject: 'The Grand Towers', leadDate: '2026-10-01', bookingStatus: 'Pending', agreementStatus: 'Drafted', possessionStatus: 'Pending' } });
+    p = await open(); await signIn(p, COMPANY_URL, 'aarav', 'sss');
+  });
+  after(async () => { await call('/leads/qa-sales-view', { method: 'DELETE', host: H, token: await adminToken() }); await p.context().close(); });
+  test('the owner cannot be changed from the lead details or the edit form', async () => {
+    await p.getByLabel('Search leads').fill('Qa Sales View'); await p.waitForTimeout(400);
+    await p.locator('[role=button][tabindex="0"]').first().click(); await p.waitForTimeout(500);
+    await tab(p, 'Details');
+    assert.equal(await p.locator('select[title^="Only people with the Transfer permission"]').first().isDisabled(), true, 'details owner');
+    await p.getByRole('button', { name: 'Edit lead' }).click(); await p.waitForTimeout(300);
+    await p.getByRole('dialog').getByRole('button', { name: 'Next' }).click(); await p.waitForTimeout(250);
+    assert.equal(await p.locator('#lm-owner').isDisabled(), true, 'edit form owner');
+    assert.match(await p.getByRole('dialog').innerText(), /Only people with the Transfer permission/);
   });
 });

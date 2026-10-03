@@ -317,8 +317,8 @@ const LeadModal: React.FC<LeadModalProps> = ({ isOpen, onClose, onAddLead, onUpd
               </Field>
             )}
             {isVisible('budget') && <Field label="Budget" htmlFor="lm-budget" required={isRequired('budget')} error={show('budget')}><Select id="lm-budget" value={budget} onChange={setBudget} placeholder="Select budget" options={(budgets || []).map(b => b.name)} invalid={!!show('budget')} /></Field>}
-            <Field label="Owner" htmlFor="lm-owner" hint="The salesperson responsible for this lead.">
-              <select id="lm-owner" value={ownerId} onChange={e => setOwnerId(e.target.value)} className={inputCls()}>
+            <Field label="Owner" htmlFor="lm-owner" hint={isEditing && !canTransfer ? 'Only people with the Transfer permission can change the owner.' : 'The salesperson responsible for this lead.'}>
+              <select id="lm-owner" value={ownerId} disabled={isEditing && !canTransfer} onChange={e => setOwnerId(e.target.value)} className={inputCls()}>
                 {autoAssign && !isEditing && <option value="">Auto-assign (distribution rules)</option>}
                 {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
               </select>

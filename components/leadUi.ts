@@ -98,3 +98,41 @@ export function nextFollowUp(lead: Lead): { date: string; time: string } | undef
 const code = (s: string) => { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0; return h.toString(36).toUpperCase().padStart(6, '0').slice(-6); };
 export const leadCode = (lead: Lead): string => 'LD-' + code(lead.id);
 export const customerCode = (lead: Lead): string => 'CU-' + code(lead.customerId || lead.id);
+
+export interface TimelineEvent { id: string; date: string; time?: string; icon: string; tone: 'blue' | 'green' | 'amber' | 'red' | 'purple' | 'gray'; title: string; detail?: string; when: 'upcoming' | 'overdue' | 'done' }
+
+/** Everything that has happened to a lead, and what is still due, in one list (built from the lead's own records). */
+export function buildTimeline(lead: Lead, userName: (id: string) => string): TimelineEvent[] {
+  const today = todayISO();
+  const ev: TimelineEvent[] = [];
+  const iso = (s?: string) => (s || '').slice(0, 10);
+  const add = (e: Omit<TimelineEvent, 'when'> & { when?: TimelineEvent['when'] }) => { if (e.date) ev.push({ ...e, when: e.when || (e.date < today ? 'done' : 'upcoming') }); };
+
+  add({ id: 'created', date: lead.leadDate, icon: 'fa-user-plus', tone: 'blue', title: 'Enquiry received', detail: [lead.channelSource, lead.leadSource].filter(Boolean).join(' › '), when: 'done' });
+
+  for (const t of lead.tasks || []) {
+    if (!t.title.startsWith('Follow-up:') || !t.dueDate) continue;
+    const time = (t.description || '').match(/Scheduled for (\d{1,2}:\d{2})/)?.[1];
+    const notes = (t.description || '').match(/Notes: (.+)/)?.[1];
+    const done = t.status === 'Completed';
+    add({ id: t.id, date: t.dueDate, time, icon: t.title.includes('Meeting') ? 'fa-handshake' : t.title.includes('Email') ? 'fa-envelope' : 'fa-phone-alt', tone: done ? 'green' : t.dueDate < today ? 'red' : 'amber',
+      title: `${t.title.replace('Follow-up:', 'Follow-up ·')}${done ? ' done' : ''}`, detail: [t.assignedTo, notes && notes !== 'N/A' ? notes : ''].filter(Boolean).join(' · '), when: done ? 'done' : t.dueDate < today ? 'overdue' : 'upcoming' });
+  }
+  for (const v of lead.siteVisits || []) {
+    const scheduled = v.status === 'Visit Scheduled';
+    add({ id: v.id, date: v.date, time: v.time, icon: 'fa-map-marker-alt', tone: v.status === 'Completed' ? 'green' : scheduled ? (v.date < today ? 'red' : 'purple') : 'gray',
+      title: `Site visit · ${v.propertyOfInterest || lead.leadProject}`, detail: [scheduled && v.date < today ? 'Missed, not updated' : v.status, v.notes].filter(Boolean).join(' · '), when: scheduled ? (v.date < today ? 'overdue' : 'upcoming') : 'done' });
+  }
+  const b = lead.bookingDetails;
+  if (b?.tokenDetails?.transactionDate) add({ id: 'token', date: iso(b.tokenDetails.transactionDate), icon: 'fa-coins', tone: 'amber', title: `Token received ₹${(b.tokenDetails.amount || 0).toLocaleString('en-IN')}`, detail: [b.tokenDetails.mode, b.tokenDetails.bankName].filter(Boolean).join(' · '), when: 'done' });
+  for (const p of b?.payments || []) add({ id: 'pay' + p.id, date: iso(p.date), icon: 'fa-rupee-sign', tone: 'green', title: `Payment ₹${(p.amount || 0).toLocaleString('en-IN')}`, detail: [p.milestoneName, p.mode].filter(Boolean).join(' · '), when: 'done' });
+  for (const d of b?.demands || []) add({ id: 'dem' + d.milestoneId, date: iso(d.dueDate), icon: 'fa-file-invoice', tone: iso(d.dueDate) < today ? 'gray' : 'blue', title: 'Demand due', detail: d.milestoneDate ? `Milestone ${iso(d.milestoneDate)}` : undefined, when: iso(d.dueDate) < today ? 'done' : 'upcoming' });
+  const cd = lead.customData || {};
+  if (cd.atsLineupDetails?.date) add({ id: 'ats', date: cd.atsLineupDetails.date, time: cd.atsLineupDetails.time, icon: 'fa-file-contract', tone: 'purple', title: 'Agreement lineup', detail: cd.atsLineupDetails.office, when: cd.isLineupDone && cd.atsLineupDetails.date < today ? 'done' : cd.atsLineupDetails.date < today ? 'overdue' : 'upcoming' });
+  if (cd.registrationDetails?.regDate) add({ id: 'reg', date: cd.registrationDetails.regDate, icon: 'fa-stamp', tone: 'green', title: 'Agreement registered', detail: cd.registrationDetails.regNumber, when: 'done' });
+  if (cd.executionDetails?.executionDate) add({ id: 'exec', date: cd.executionDetails.executionDate, icon: 'fa-check-circle', tone: 'green', title: 'Agreement executed', detail: cd.executionDetails.remarks, when: 'done' });
+  for (const [i, h] of ((cd.transferHistory as { at: string; from: string; to: string; reason?: string }[]) || []).entries()) add({ id: 'tr' + i, date: iso(h.at), icon: 'fa-exchange-alt', tone: 'gray', title: `Owner changed to ${userName(h.to)}`, detail: [`from ${userName(h.from)}`, h.reason].filter(Boolean).join(' · '), when: 'done' });
+  for (const [i, h] of ((cd.projectShifts as { at: string; from: string; to: string }[]) || []).entries()) add({ id: 'ps' + i, date: iso(h.at), icon: 'fa-building', tone: 'gray', title: `Shifted to ${h.to}`, detail: `from ${h.from}`, when: 'done' });
+  for (const [i, h] of ((cd.mergedFrom as { name: string; at: string }[]) || []).entries()) add({ id: 'mg' + i, date: iso(h.at), icon: 'fa-code-merge', tone: 'gray', title: 'Merged a duplicate', detail: h.name, when: 'done' });
+  return ev;
+}

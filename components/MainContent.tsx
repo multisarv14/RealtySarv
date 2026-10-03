@@ -7,7 +7,7 @@ import BookingDetailTab from './BookingDetailTab';
 import LedgerTab from './LedgerTab';
 import DocumentHub from './DocumentHub';
 import { v4 as uuidv4 } from 'uuid';
-import { PIPELINE_STEPS, callNumber, customerCode, getPipelineStep, leadCode, leadSummary, openWhatsApp } from './leadUi';
+import { PIPELINE_STEPS, buildTimeline, callNumber, customerCode, friendlyDate, getPipelineStep, leadCode, leadSummary, openWhatsApp, time12 } from './leadUi';
 import { toast } from './ui/Toast';
 
 type ContentTab = 'chat' | 'history' | 'details' | 'siteVisit' | 'booking' | 'ledger' | 'documents';
@@ -30,6 +30,7 @@ interface MainContentProps {
   onUpdateTaskStatus: (leadId: string, taskId: string, newStatus: TaskStatus) => void;
   onUpdateLeadLifecycle: (leadId: string, stage: LifecycleStage, newStatus: LeadLifecycleStatus) => void;
   onUpdateLeadOwner: (leadId: string, ownerId: string) => void;
+  canTransfer?: boolean;
   onUpdateApplicantDocument: (leadId: string, applicantId: string, docType: string, newDoc: CustomerDocument) => void;
   onUpdateLeadCustomData: (leadId: string, data: Record<string, any>) => void;
   activeContentTab: ContentTab;
@@ -56,6 +57,7 @@ const MainContent: React.FC<MainContentProps> = ({
   onUpdateTaskStatus,
   onUpdateLeadLifecycle,
   onUpdateLeadOwner,
+  canTransfer,
   onUpdateApplicantDocument,
   onUpdateLeadCustomData,
   activeContentTab,
@@ -136,61 +138,55 @@ const MainContent: React.FC<MainContentProps> = ({
     }
 
     if (activeContentTab === 'history' || activeContentTab === 'siteVisit') {
-      const followUpTasks = (selectedLead.tasks || [])
-        .filter(task => task.title.startsWith('Follow-up:'))
-        .sort((a, b) => b.dueDate.localeCompare(a.dueDate));
-      const visits = [...(selectedLead.siteVisits || [])].sort((a, b) => b.date.localeCompare(a.date));
-      const sectionHead = (title: string, count: number, onAdd?: () => void) => (
-        <div className="flex items-center justify-between mb-2">
+      const nameOf = (id: string) => users.find(u => u.id === id)?.name || 'someone';
+      const events = buildTimeline(selectedLead, nameOf);
+      const key = (e: { date: string; time?: string }) => `${e.date}T${(e.time || '00:00').padStart(5, '0')}`;
+      const due = events.filter(e => e.when !== 'done').sort((a, b) => (a.when === b.when ? key(a).localeCompare(key(b)) : a.when === 'overdue' ? -1 : 1));
+      const past = events.filter(e => e.when === 'done').sort((a, b) => key(b).localeCompare(key(a)));
+      const TONE: Record<string, string> = { blue: 'bg-blue-500/15 text-blue-500', green: 'bg-green-500/15 text-green-500', amber: 'bg-amber-500/15 text-amber-500', red: 'bg-red-500/15 text-red-500', purple: 'bg-purple-500/15 text-purple-400', gray: 'bg-[var(--light-bg)] text-[var(--text-secondary)]' };
+      const row = (e: ReturnType<typeof buildTimeline>[number], last: boolean) => (
+        <li key={e.id} className="relative flex gap-3 pb-5">
+          {!last && <span className="absolute left-[15px] top-8 bottom-0 w-px bg-[var(--border-color)]" aria-hidden="true"></span>}
+          <span className={`relative z-[1] w-8 h-8 shrink-0 rounded-full flex items-center justify-center text-xs ${TONE[e.tone]}`} aria-hidden="true"><i className={`fas ${e.icon}`}></i></span>
+          <div className="min-w-0 flex-1 pt-0.5">
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-sm font-semibold text-[var(--text-primary)]">{e.title}</p>
+              <span className={`shrink-0 text-xs whitespace-nowrap ${e.when === 'overdue' ? 'text-red-500 font-semibold' : 'text-[var(--text-secondary)]'}`}>{[friendlyDate(e.date), e.time && time12(e.time)].filter(Boolean).join(', ')}</span>
+            </div>
+            {e.detail && <p className="text-xs text-[var(--text-secondary)] mt-0.5 whitespace-pre-line break-words">{e.detail}</p>}
+          </div>
+        </li>
+      );
+      const head = (title: string, count: number, actions?: React.ReactNode) => (
+        <div className="flex items-center justify-between mb-3">
           <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">{title} <span className="font-medium opacity-70">· {count}</span></h3>
-          {onAdd && <button onClick={onAdd} className="text-xs font-semibold text-[var(--primary-color)] hover:underline">+ Schedule</button>}
+          {actions}
         </div>
       );
       return (
-        <div className="flex-1 overflow-y-auto custom-scrollbar bg-[var(--dark-bg)]">
-          <div className="max-w-2xl mx-auto p-4 sm:p-6 space-y-8">
-            <section>
-              {sectionHead('Follow-ups', followUpTasks.length, onToggleFollowUpModal)}
-              {followUpTasks.length === 0 ? <p className="text-sm text-[var(--text-secondary)] py-3">No follow-ups yet.</p> : (
-                <ul className="space-y-2">
-                  {followUpTasks.map((task) => (
-                    <li key={task.id} className="bg-[var(--medium-bg)] p-3 rounded-lg border border-[var(--border-color)]">
-                      <div className="flex justify-between items-start gap-3">
-                        <p className="font-semibold text-sm text-[var(--text-primary)]">{task.title.replace('Follow-up:', 'Follow-up ·')}</p>
-                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded shrink-0 ${task.status === 'Completed' ? 'bg-green-500/15 text-green-500' : 'bg-blue-500/15 text-blue-500'}`}>{task.status}</span>
-                      </div>
-                      <p className="text-xs text-[var(--text-secondary)] mt-0.5">{task.dueDate}</p>
-                      {task.description && <p className="mt-2 text-xs text-[var(--text-secondary)] whitespace-pre-line">{task.description}</p>}
-                    </li>
-                  ))}
-                </ul>
-              )}
+        <div className="flex-1 overflow-y-auto custom-scrollbar bg-[var(--dark-bg)]" data-testid="lead-timeline">
+          <div className="max-w-3xl mx-auto p-4 sm:p-6 space-y-8">
+            <section aria-label="Still to do">
+              {head('Still to do', due.length, (
+                <div className="flex gap-3">
+                  <button onClick={onToggleFollowUpModal} className="text-xs font-semibold text-[var(--primary-color)] hover:underline">+ Follow-up</button>
+                  {onToggleSiteVisitModal && <button onClick={onToggleSiteVisitModal} className="text-xs font-semibold text-[var(--primary-color)] hover:underline">+ Site visit</button>}
+                </div>
+              ))}
+              {due.length === 0
+                ? <p className="text-sm text-[var(--text-secondary)] py-2">Nothing is scheduled. Add the next follow-up so this lead does not go cold.</p>
+                : <ol>{due.map((e, i) => row(e, i === due.length - 1))}</ol>}
             </section>
-            <section>
-              {sectionHead('Site visits', visits.length, onToggleSiteVisitModal)}
-              {visits.length === 0 ? <p className="text-sm text-[var(--text-secondary)] py-3">No site visits yet.</p> : (
-                <ul className="space-y-2">
-                  {visits.map((visit) => (
-                    <li key={visit.id} className="bg-[var(--medium-bg)] p-3 rounded-lg border border-[var(--border-color)]">
-                      <div className="flex justify-between items-start gap-3">
-                        <div>
-                          <p className="font-semibold text-sm text-[var(--text-primary)]">{visit.propertyOfInterest}</p>
-                          <p className="text-xs text-[var(--text-secondary)] mt-0.5"><i className="far fa-clock mr-1" aria-hidden="true"></i>{visit.date} at {visit.time}</p>
-                        </div>
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-semibold text-white shrink-0 ${getSiteVisitStatusColorClass(visit.status)}`}>{visit.status}</span>
-                      </div>
-                      {visit.notes && <p className="mt-2 text-xs text-[var(--text-secondary)]">{visit.notes}</p>}
-                    </li>
-                  ))}
-                </ul>
-              )}
+            <section aria-label="What has happened">
+              {head('What has happened', past.length)}
+              <ol>{past.map((e, i) => row(e, i === past.length - 1))}</ol>
             </section>
           </div>
         </div>
       );
     }
 
-    if (activeContentTab === 'details') return <LeadDetail lead={selectedLead} users={users} onAddPropertyImage={onAddPropertyImage} onRemovePropertyImage={onRemovePropertyImage} onUpdateLeadLifecycle={onUpdateLeadLifecycle} onUpdateLeadOwner={onUpdateLeadOwner} onToggleEditLeadModal={onToggleEditLeadModal} />;
+    if (activeContentTab === 'details') return <LeadDetail lead={selectedLead} users={users} onAddPropertyImage={onAddPropertyImage} onRemovePropertyImage={onRemovePropertyImage} onUpdateLeadLifecycle={onUpdateLeadLifecycle} onUpdateLeadOwner={onUpdateLeadOwner} canTransfer={canTransfer} onToggleEditLeadModal={onToggleEditLeadModal} />;
     
     if (activeContentTab === 'booking') {
         const projectForLead = (projects || []).find(p => p.name === selectedLead.leadProject);

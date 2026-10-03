@@ -5,14 +5,23 @@ import { COLLECTIONS } from '../config/collections';
 import { TenantRequest } from '../middleware/tenant';
 import { ERP_COLLECTIONS, PLAN_SPECS } from '../config/plans';
 import { AuthedRequest, requireAdmin } from '../middleware/auth';
+import { roleAccess } from '../middleware/access';
 
 // Generic REST surface that mirrors the Dexie table API the frontend already uses:
 //   GET /:c   POST /:c   PUT /:c/bulk   DELETE /:c   GET|PUT|DELETE /:c/:id
 const router = Router();
 
+// Company settings and master data: everyone reads them, only an Admin changes them.
+const ADMIN_ONLY_WRITE = new Set([
+  'sources', 'templates', 'paymentPlans', 'budgets', 'clientProfiles', 'unitTypes', 'locationSettings', 'livingPlaces',
+  'leadStatusTypes', 'siteVisitStatusTypes', 'taskPriorityTypes', 'bookingStatusTypes', 'agreementStatusTypes',
+  'possessionStatusTypes', 'inventoryStatusTypes', 'projectTypeTypes', 'projectStatusTypes', 'userRoleSettings',
+  'userDesignations', 'channelPartners', 'companyProfile', 'financialSettings', 'applicationSettings', 'formFieldConfigs',
+]);
+
 // Anyone signed in may read and edit business data, but only Admins may clear a collection
 // or write to `users` (otherwise a Sales login could promote itself to Admin).
-router.use('/:collection', (req, res, next) => {
+router.use('/:collection', async (req, res, next) => {
   const name = req.params.collection;
   // Plans without the ERP module (Growth Hub) can't use ProjectSarv / FinanceSarv data.
   const tenant = (req as TenantRequest).tenant;
@@ -21,7 +30,12 @@ router.use('/:collection', (req, res, next) => {
   }
   const isWrite = req.method !== 'GET';
   const isClear = req.method === 'DELETE' && req.path === '/';
-  if (isWrite && (name === 'users' || isClear)) return requireAdmin(req as AuthedRequest, res, next);
+  if (isWrite && (name === 'users' || isClear || ADMIN_ONLY_WRITE.has(name))) return requireAdmin(req as AuthedRequest, res, next);
+  // ProjectSarv / FinanceSarv data needs one of those modules in the person's role.
+  if (ERP_COLLECTIONS.has(name)) {
+    const access = await roleAccess(req as TenantRequest);
+    if (!access.has('ProjectSarv') && !access.has('FinanceSarv')) return res.status(403).json({ message: 'Your role does not include ProjectSarv or FinanceSarv.' });
+  }
   next();
 });
 
@@ -54,6 +68,16 @@ async function userLimitMessage(req: Request, docs: any[]): Promise<string | nul
   return others + incoming > max
     ? `Your ${t.plan} plan includes up to ${max} active users. Deactivate a user, or upgrade to Ultimate Stack for unlimited users.`
     : null;
+}
+
+// Moving a lead to another person or project needs the Transfer permission (Roles & access).
+async function transferBlocked(req: Request, docs: any[]): Promise<string | null> {
+  if (req.params.collection !== 'leads' || (req as TenantRequest).role === 'Admin' || !docs.length) return null;
+  if ((await roleAccess(req as TenantRequest)).has('Transfer')) return null;
+  const before = await M(req, 'leads').find({ _id: { $in: docs.map((d) => d._id) } }).select('ownerId leadProject').lean();
+  const was = new Map(before.map((b: any) => [String(b._id), b]));
+  const moved = docs.some((d) => { const b: any = was.get(String(d._id)); return b && (b.ownerId !== d.ownerId || b.leadProject !== d.leadProject); });
+  return moved ? "You don't have permission to transfer leads. Ask an Admin." : null;
 }
 
 const handle = (fn: (req: Request, res: Response) => Promise<any>) => (req: Request, res: Response) =>
@@ -92,6 +116,7 @@ router.put('/:collection/bulk', handle(async (req, res) => {
   const items: any[] = Array.isArray(req.body) ? req.body : [];
   const docs = await Promise.all(items.map((i) => prepare(name, i)));
   if (name === 'users') { const msg = await userLimitMessage(req, docs); if (msg) return res.status(403).json({ message: msg }); }
+  { const msg = await transferBlocked(req, docs); if (msg) return res.status(403).json({ message: msg }); }
   if (docs.length) {
     await M(req, name).bulkWrite(docs.map((d) => ({ replaceOne: { filter: { _id: d._id }, replacement: d, upsert: true } })));
   }
@@ -117,6 +142,7 @@ router.put('/:collection/:id', handle(async (req, res) => {
   const prevHash = (existing as any)?.passwordHash;
   if (name === 'users' && !doc.passwordHash && prevHash) doc.passwordHash = prevHash;
   if (name === 'users') { const msg = await userLimitMessage(req, [doc]); if (msg) return res.status(403).json({ message: msg }); }
+  { const msg = await transferBlocked(req, [doc]); if (msg) return res.status(403).json({ message: msg }); }
   await M(req, name).replaceOne({ _id: doc._id }, doc, { upsert: true });
   res.json(toClient(name, doc));
 }));

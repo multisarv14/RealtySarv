@@ -429,6 +429,7 @@ const MainAppContainer: React.FC<MainAppContainerProps> = ({
             onUpdateTaskStatus={onUpdateTaskStatus} 
             onUpdateLeadLifecycle={onUpdateLeadLifecycle} 
             onUpdateLeadOwner={onUpdateLeadOwner} 
+            canTransfer={canTransfer} 
             onUpdateApplicantDocument={handleUpdateApplicantDocument} 
             onUpdateLeadCustomData={handleUpdateLeadCustomData}
             activeContentTab={activeContentTab}

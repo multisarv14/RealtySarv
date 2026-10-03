@@ -13,7 +13,8 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
 
   return (
     <div
-      className={`max-w-[75%] px-3.5 py-2 rounded-2xl mb-1 relative animate-fadeIn flex flex-col border text-[var(--text-primary)] ${
+      data-testid="message-bubble"
+      className={`max-w-[min(78%,34rem)] px-3.5 py-2 rounded-2xl mb-1 relative animate-fadeIn flex flex-col border text-[var(--text-primary)] ${
         isSent
           ? 'bg-[var(--sent-message)] border-transparent self-end rounded-tr-none'
           : 'bg-[var(--received-message)] border-[var(--border-color)] self-start rounded-tl-none'

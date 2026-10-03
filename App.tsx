@@ -180,7 +180,8 @@ const App: React.FC = () => {
   const handleLeadsUpdate = async (updatedLeads: Lead[]) => {
     const before = new Map((leads || []).map((l) => [l.id, JSON.stringify(l)]));
     const changed = updatedLeads.filter((l) => before.get(l.id) !== JSON.stringify(l));
-    if (changed.length) await db.leads.bulkPut(changed);
+    // The server has the last word (for example, only people with the Transfer permission may move a lead): say so instead of failing silently.
+    try { if (changed.length) await db.leads.bulkPut(changed); } catch (e: any) { toast.error(e?.message || 'Could not save the lead.'); }
   };
 
   const handleUsersUpdate = async (updatedUsers: User[]) => {
@@ -284,7 +285,7 @@ const App: React.FC = () => {
           onLogout={handleLogout}
           onUpdateTaskStatus={async (leadId, taskId, status) => await db.leads.where({ id: leadId }).modify(l => { const t = l.tasks.find(x => x.id === taskId); if (t) t.status = status; })}
           onUpdateLeadLifecycle={async (leadId, stage, status) => await db.leads.update(leadId, { [stage]: status } as any)}
-          onUpdateLeadOwner={async (leadId, ownerId) => await db.leads.update(leadId, { ownerId })}
+          onUpdateLeadOwner={async (leadId, ownerId) => { try { await db.leads.update(leadId, { ownerId }); } catch (e: any) { toast.error(e?.message || 'Could not change the owner.'); } }}
         />
       );
     }
