@@ -18,7 +18,7 @@ export const PLANS: Plan[] = [
     tagline: 'For sales teams that live in the CRM',
     modules: { crm: true, erp: false },
     moduleNames: ['LeadSarv CRM'],
-    features: ['LeadSarv CRM: leads, site visits, bookings', 'RERA-ready booking documents', 'WhatsApp & SMS integrations', 'Financial dashboard', 'Up to 10 active users'],
+    features: ['LeadSarv CRM', 'RERA-ready booking documents', 'WhatsApp & SMS integrations', 'Up to 10 active users'],
   },
   {
     id: 'Ultimate Stack',
@@ -26,7 +26,7 @@ export const PLANS: Plan[] = [
     tagline: 'CRM + site operations + accounts',
     modules: { crm: true, erp: true },
     moduleNames: ['LeadSarv CRM', 'ProjectSarv ERP', 'FinanceSarv'],
-    features: ['Everything in Growth Hub', 'ProjectSarv ERP: BOQ, procurement, contractors', 'FinanceSarv: ledger, GST & TDS reports', 'Tally integration', 'Unlimited users', 'Priority support'],
+    features: ['LeadSarv CRM, ProjectSarv ERP and FinanceSarv', 'Tally integration', 'Unlimited users', 'Priority support'],
   },
 ];
 
