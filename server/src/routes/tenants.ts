@@ -21,7 +21,7 @@ function subdomainProblem(sub: string): string | null {
 
 // Creating a company creates a database, so cap it per IP (in-memory; use a shared store if you run several servers).
 const hits = new Map<string, number[]>();
-function tooMany(ip: string, max = 5, windowMs = 60 * 60 * 1000): boolean {
+function tooMany(ip: string, max = Number(process.env.TENANT_CREATE_LIMIT) || 5, windowMs = 60 * 60 * 1000): boolean {
   const now = Date.now();
   const recent = (hits.get(ip) || []).filter((t) => now - t < windowMs);
   recent.push(now);

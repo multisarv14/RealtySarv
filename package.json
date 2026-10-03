@@ -10,7 +10,10 @@
     "db:seed": "npm --prefix server run seed",
     "build": "vite build",
     "preview": "vite preview",
-    "lint": "eslint . --ext .ts,.tsx"
+    "lint": "eslint . --ext .ts,.tsx",
+    "test": "npm --prefix server run seed:reset && (node --test --test-concurrency=1 tests/api.test.mjs tests/e2e.test.mjs; code=$?; npm --prefix server run cleanup:qa; exit $code)",
+    "test:api": "node --test tests/api.test.mjs",
+    "test:e2e": "npm --prefix server run seed:reset && node --test tests/e2e.test.mjs"
   },
   "dependencies": {
     "react": "^19.2.0",
@@ -26,6 +29,7 @@
     "@vitejs/plugin-react": "^5.0.0",
     "autoprefixer": "^10.4.24",
     "eslint": "^10.0.1",
+    "playwright": "^1.63.0",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.19",
     "typescript": "~5.8.2",

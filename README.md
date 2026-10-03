@@ -27,6 +27,17 @@ Open **http://localhost:3000** (main site) or **http://multisarv.localhost:3000*
 `*.localhost` resolves to your machine automatically, so any new company works at `http://<subdomain>.localhost:3000`.
 `npm --prefix server run seed:reset` rebuilds the demo company.
 
+## Tests
+With MongoDB, the API (`npm run server`) and the frontend (`npm run dev`) running:
+```bash
+npx playwright install chromium   # once, for the browser tests
+npm test                          # reseeds the demo company, runs the API + browser suites, then removes test companies
+npm run test:api                  # API only (no browser)
+```
+`tests/api.test.mjs` covers addresses, sign-in, company isolation, roles, plan limits and the demo data;
+`tests/e2e.test.mjs` drives the real app: landing page, install wizard, sign-in, every CRM menu, privacy (no phone numbers on screen),
+all forms and popups, a full booking, and phone layouts. Set `TENANT_CREATE_LIMIT` in `server/.env` if you create many companies in a test run.
+
 ## Go live on your domain (GoDaddy)
 1. Host the API + built frontend on a server with a public IP (VPS, Render, Fly, AWS...). `npm run build`, then serve `dist/`
    and proxy `/api` to the Node server.
