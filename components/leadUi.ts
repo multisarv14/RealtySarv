@@ -66,7 +66,7 @@ export const phoneForTel = (phone: string): string => (phone || '').replace(/[^\
 /** Start a phone call. A button + this handler (instead of a tel: link) keeps the number out of the browser's hover status bar. */
 export const callNumber = (phone: string): void => { window.location.href = `tel:${phoneForTel(phone)}`; };
 /** Open WhatsApp chat with the number, again without exposing it in a link. */
-export const openWhatsApp = (phone: string): void => { window.open(`https://wa.me/${phoneForWhatsApp(phone)}`, '_blank', 'noopener,noreferrer'); };
+export const openWhatsApp = (phone: string, text?: string): void => { window.open(`https://wa.me/${phoneForWhatsApp(phone)}${text ? `?text=${encodeURIComponent(text)}` : ''}`, '_blank', 'noopener,noreferrer'); };
 
 /** Leads that already use this mobile number (last 10 digits) or email. Numbers are compared, never shown. */
 export function findLeadMatches<T extends { id: string; phone: string; email: string }>(leads: T[], q: { phone?: string; email?: string; excludeId?: string }): T[] {
@@ -99,7 +99,7 @@ const code = (s: string) => { let h = 5381; for (let i = 0; i < s.length; i++) h
 export const leadCode = (lead: Lead): string => 'LD-' + code(lead.id);
 export const customerCode = (lead: Lead): string => 'CU-' + code(lead.customerId || lead.id);
 
-export interface TimelineEvent { id: string; date: string; time?: string; icon: string; tone: 'blue' | 'green' | 'amber' | 'red' | 'purple' | 'gray'; title: string; detail?: string; when: 'upcoming' | 'overdue' | 'done' }
+export interface TimelineEvent { taskId?: string; id: string; date: string; time?: string; icon: string; tone: 'blue' | 'green' | 'amber' | 'red' | 'purple' | 'gray'; title: string; detail?: string; when: 'upcoming' | 'overdue' | 'done' }
 
 /** Everything that has happened to a lead, and what is still due, in one list (built from the lead's own records). */
 export function buildTimeline(lead: Lead, userName: (id: string) => string): TimelineEvent[] {
@@ -114,9 +114,9 @@ export function buildTimeline(lead: Lead, userName: (id: string) => string): Tim
     if (!t.title.startsWith('Follow-up:') || !t.dueDate) continue;
     const time = (t.description || '').match(/Scheduled for (\d{1,2}:\d{2})/)?.[1];
     const notes = (t.description || '').match(/Notes: (.+)/)?.[1];
-    const done = t.status === 'Completed';
-    add({ id: t.id, date: t.dueDate, time, icon: t.title.includes('Meeting') ? 'fa-handshake' : t.title.includes('Email') ? 'fa-envelope' : 'fa-phone-alt', tone: done ? 'green' : t.dueDate < today ? 'red' : 'amber',
-      title: `${t.title.replace('Follow-up:', 'Follow-up ·')}${done ? ' done' : ''}`, detail: [t.assignedTo, notes && notes !== 'N/A' ? notes : ''].filter(Boolean).join(' · '), when: done ? 'done' : t.dueDate < today ? 'overdue' : 'upcoming' });
+    const done = t.status === 'Completed' || t.status === 'Cancelled';
+    add({ id: t.id, taskId: t.id, date: t.dueDate, time, icon: t.title.includes('Meeting') ? 'fa-handshake' : t.title.includes('Email') ? 'fa-envelope' : 'fa-phone-alt', tone: t.status === 'Cancelled' ? 'gray' : done ? 'green' : t.dueDate < today ? 'red' : 'amber',
+      title: `${t.title.replace('Follow-up:', 'Follow-up ·')}${t.status === 'Cancelled' ? ' closed' : done ? ' done' : ''}`, detail: [t.assignedTo, notes && notes !== 'N/A' ? notes : ''].filter(Boolean).join(' · '), when: done ? 'done' : t.dueDate < today ? 'overdue' : 'upcoming' });
   }
   for (const v of lead.siteVisits || []) {
     const scheduled = v.status === 'Visit Scheduled';

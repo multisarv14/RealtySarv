@@ -284,7 +284,12 @@ const App: React.FC = () => {
           onNavigateToAdmin={() => setCurrentAppView('admin')}
           onLogout={handleLogout}
           onUpdateTaskStatus={async (leadId, taskId, status) => await db.leads.where({ id: leadId }).modify(l => { const t = l.tasks.find(x => x.id === taskId); if (t) t.status = status; })}
-          onUpdateLeadLifecycle={async (leadId, stage, status) => await db.leads.update(leadId, { [stage]: status } as any)}
+          onUpdateLeadLifecycle={async (leadId, stage, status) => {
+            // Marking a lead Unqualified from the details screen also closes its open follow-ups, like the update bar does.
+            if (stage === 'leadStatus' && status === 'Unqualified') {
+              await db.leads.where({ id: leadId }).modify(l => { l.leadStatus = 'Unqualified'; (l.tasks || []).forEach(t => { if (t.status === 'Pending' && t.title.startsWith('Follow-up:')) { t.status = 'Cancelled'; (t as any).completedAt = new Date().toISOString(); } }); });
+            } else await db.leads.update(leadId, { [stage]: status } as any);
+          }}
           onUpdateLeadOwner={async (leadId, ownerId) => { try { await db.leads.update(leadId, { ownerId }); } catch (e: any) { toast.error(e?.message || 'Could not change the owner.'); } }}
         />
       );

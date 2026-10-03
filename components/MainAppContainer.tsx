@@ -14,6 +14,8 @@ import ExecutionDetailsModal from './modals/ExecutionDetailsModal';
 import { v4 as uuidv4 } from 'uuid';
 import { Toaster, toast } from './ui/Toast';
 import { matchRule, pickAssignee } from '../distribution';
+import { friendlyDate, time12 } from './leadUi';
+import type { LogUpdatePayload } from './LogUpdateBar';
 
 type ActiveMenu = 'Leads' | 'Visits' | 'Booking' | 'Agreement' | 'Possession';
 type ContentTab = 'chat' | 'history' | 'details' | 'siteVisit' | 'booking' | 'ledger' | 'documents';
@@ -139,6 +141,27 @@ const MainAppContainer: React.FC<MainAppContainerProps> = ({
           : lead
     );
     onLeadsUpdate(updatedLeads);
+  }, [leads, onLeadsUpdate]);
+
+  // One contact, one save: the message, the follow-up it completes, the status now and the next follow-up.
+  const handleLogUpdate = React.useCallback((leadId: string, p: LogUpdatePayload) => {
+    const lead = leads.find(l => l.id === leadId);
+    if (!lead) return;
+    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const message: Message = { id: uuidv4(), content: p.text || p.outcome || '', time, sender: p.direction === 'received' ? 'received' : 'sent', kind: p.kind, outcome: p.outcome, ...(p.recordingUrl ? { recordingUrl: p.recordingUrl, recordingName: p.recordingName } : {}) };
+    const nowIso = new Date().toISOString();
+    // Unqualified: nothing more to chase, so the follow-ups still open are closed (not left to show up as overdue).
+    const tasks = (lead.tasks || []).map(t => (t.id === p.completeTaskId ? { ...t, status: 'Completed' as const, completedAt: nowIso }
+      : p.closeOpenFollowUps && t.status === 'Pending' && t.title.startsWith('Follow-up:') ? { ...t, status: 'Cancelled' as const, completedAt: nowIso } : t));
+    if (p.next) tasks.push({ id: uuidv4(), leadId, title: `Follow-up: ${p.next.type}`, description: `Scheduled for ${p.next.time}. \nNotes: N/A`, dueDate: p.next.date, priority: 'Medium', status: 'Pending', assignedTo: users.find(u => u.id === lead.ownerId)?.name || '' });
+    onLeadsUpdate(leads.map(l => (l.id === leadId ? { ...l, messages: [...l.messages, message], lastMessage: message.content, time, leadStatus: p.status, tasks } : l)));
+    const parts = [p.completeTaskId ? 'Follow-up done' : p.kind === 'whatsapp' ? 'WhatsApp logged' : p.recordingUrl ? 'Call and recording saved' : 'Saved', p.closeOpenFollowUps ? 'open follow-ups closed' : '', p.status !== lead.leadStatus ? `status ${p.status}` : '', p.next ? `next ${friendlyDate(p.next.date)} ${time12(p.next.time)}` : ''].filter(Boolean);
+    toast.success(parts.join(' · ') + '.');
+  }, [leads, users, onLeadsUpdate]);
+
+  const handleRescheduleFollowUp = React.useCallback((leadId: string, taskId: string, date: string, time: string) => {
+    onLeadsUpdate(leads.map(l => (l.id === leadId ? { ...l, tasks: (l.tasks || []).map(t => (t.id === taskId ? { ...t, dueDate: date, description: /Scheduled for/.test(t.description || '') ? (t.description || '').replace(/Scheduled for \d{1,2}:\d{2}/, `Scheduled for ${time}`) : `Scheduled for ${time}. \nNotes: N/A` } : t)) } : l)));
+    toast.success(`Follow-up moved to ${friendlyDate(date)}, ${time12(time)}.`);
   }, [leads, onLeadsUpdate]);
 
   const handleBackButtonClick = React.useCallback(() => {
@@ -417,6 +440,8 @@ const MainAppContainer: React.FC<MainAppContainerProps> = ({
             projects={projects} 
             paymentPlans={paymentPlans} 
             onSendMessage={handleSendMessage} 
+            onLogUpdate={handleLogUpdate} 
+            onRescheduleFollowUp={handleRescheduleFollowUp} 
             onBackButtonClick={handleBackButtonClick} 
             onToggleFollowUpModal={() => handleToggleFollowUpModal('Leads')} 
             onToggleSiteVisitModal={() => handleToggleSiteVisitModal()} 

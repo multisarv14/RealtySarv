@@ -5,7 +5,7 @@ export type SystemType = 'LeadSarv' | 'ProjectSarv' | 'FinanceSarv';
 
 export type LeadStatus = 'New' | 'Contacted' | 'Qualified' | 'Unqualified' | 'Converted';
 export type SiteVisitStatus = 'Visit Scheduled' | 'Completed' | 'Canceled';
-export type TaskStatus = 'Pending' | 'Completed' | 'Overdue';
+export type TaskStatus = 'Pending' | 'Completed' | 'Overdue' | 'Cancelled';
 export type TaskPriority = 'Low' | 'Medium' | 'High';
 export type UserRole = 'Admin' | 'Sales' | 'User';
 export type BookingStatus = 'Pending' | 'Booked';
@@ -18,9 +18,9 @@ export type LeadLifecycleStatus = LeadStatus | BookingStatus | AgreementStatus |
 export type FormModule = 'lead' | 'project' | 'booking' | 'user' | 'company' | 'vendor' | 'procurement' | 'contract' | 'site_ops' | 'inventory_master' | 'boq' | 'finance_ledger';
 export type FieldType = 'text' | 'number' | 'date' | 'select' | 'textarea';
 
-export interface Message { id: string; content: string; time: string; sender: 'sent' | 'received'; }
+export interface Message { id: string; content: string; time: string; sender: 'sent' | 'received'; /** What kind of contact this was (a plain note when empty). */ kind?: 'note' | 'call' | 'whatsapp' | 'meeting'; outcome?: string; /** A recording of the call (a link, or a small audio file kept as a data URL). */ recordingUrl?: string; recordingName?: string; }
 export interface SiteVisit { id: string; leadId: string; date: string; time: string; propertyOfInterest: string; notes?: string; status: SiteVisitStatus; }
-export interface Task { id: string; leadId: string; title: string; description?: string; dueDate: string; priority: TaskPriority; status: TaskStatus; assignedTo: string; }
+export interface Task { id: string; leadId: string; title: string; description?: string; dueDate: string; priority: TaskPriority; status: TaskStatus; assignedTo: string; completedAt?: string; }
 export interface PropertyImage { id: string; url: string; }
 export interface CustomerDocument { status: 'Pending' | 'Uploaded' | 'Verified' | 'Rejected'; fileName?: string; fileUrl?: string; }
 

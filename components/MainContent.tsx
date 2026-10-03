@@ -7,8 +7,10 @@ import BookingDetailTab from './BookingDetailTab';
 import LedgerTab from './LedgerTab';
 import DocumentHub from './DocumentHub';
 import { v4 as uuidv4 } from 'uuid';
-import { PIPELINE_STEPS, buildTimeline, callNumber, customerCode, friendlyDate, getPipelineStep, leadCode, leadSummary, openWhatsApp, time12 } from './leadUi';
+import { PIPELINE_STEPS, buildTimeline, callNumber, customerCode, friendlyDate, getPipelineStep, leadCode, leadSummary, openWhatsApp, time12, todayISO } from './leadUi';
 import { toast } from './ui/Toast';
+import LogUpdateBar, { LogUpdatePayload } from './LogUpdateBar';
+import { Modal, Field, Chips, inputCls } from './ui/Modal';
 
 type ContentTab = 'chat' | 'history' | 'details' | 'siteVisit' | 'booking' | 'ledger' | 'documents';
 
@@ -18,6 +20,9 @@ interface MainContentProps {
   projects: Project[];
   paymentPlans: PaymentPlan[];
   onSendMessage: (leadId: string, message: Message) => void;
+  /** Saves a contact in one go: the message, the follow-up it completes, the status now and the next follow-up. */
+  onLogUpdate: (leadId: string, payload: LogUpdatePayload) => void;
+  onRescheduleFollowUp: (leadId: string, taskId: string, date: string, time: string) => void;
   onBackButtonClick: () => void;
   onToggleFollowUpModal: () => void;
   onToggleSiteVisitModal?: () => void;
@@ -39,12 +44,38 @@ interface MainContentProps {
   setActiveDocTab: (tab: string) => void;
 }
 
+const addDaysIso = (n: number) => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().split('T')[0]; };
+const RESCHEDULE_QUICK: [string, number][] = [['Today', 0], ['Tomorrow', 1], ['In 3 days', 3], ['Next week', 7]];
+
+/** Move a pending follow-up to another day or time. */
+const RescheduleModal: React.FC<{ target: { taskId: string; title: string } | null; onClose: () => void; onSave: (date: string, time: string) => void }> = ({ target, onClose, onSave }) => {
+  const [date, setDate] = React.useState('');
+  const [time, setTime] = React.useState('11:00');
+  const [submitted, setSubmitted] = React.useState(false);
+  React.useEffect(() => { if (target) { setDate(''); setTime('11:00'); setSubmitted(false); } }, [target]);
+  const err = (!date ? 'Pick the new date.' : !time ? 'Pick the time.' : '');
+  return (
+    <Modal isOpen={!!target} onClose={onClose} size="sm" title="Reschedule follow-up" subtitle={target?.title}
+      onSubmit={(e) => { e.preventDefault(); setSubmitted(true); if (err) return; onSave(date, time); onClose(); }} submitLabel="Reschedule">
+      <Field label="New day" htmlFor="rs-date" required error={submitted ? err : null}>
+        <div className="mb-2"><Chips label="Quick date" options={RESCHEDULE_QUICK.map(q => q[0])} value={RESCHEDULE_QUICK.find(([, n]) => addDaysIso(n) === date)?.[0] || ''} onChange={(l: string) => setDate(addDaysIso(RESCHEDULE_QUICK.find(q => q[0] === l)![1]))} /></div>
+        <div className="grid grid-cols-2 gap-3">
+          <input id="rs-date" type="date" min={todayISO()} value={date} onChange={e => setDate(e.target.value)} className={inputCls(submitted && !date)} aria-label="New date" />
+          <input type="time" value={time} onChange={e => setTime(e.target.value)} className={inputCls(submitted && !time)} aria-label="New time" />
+        </div>
+      </Field>
+    </Modal>
+  );
+};
+
 const MainContent: React.FC<MainContentProps> = ({
   selectedLead,
   users,
   projects,
   paymentPlans,
   onSendMessage,
+  onLogUpdate,
+  onRescheduleFollowUp,
   onBackButtonClick,
   onToggleFollowUpModal,
   onToggleSiteVisitModal,
@@ -65,7 +96,9 @@ const MainContent: React.FC<MainContentProps> = ({
   activeDocTab,
   setActiveDocTab,
 }) => {
-  const [inputMessage, setInputMessage] = React.useState<string>('');
+  const [focusTaskId, setFocusTaskId] = React.useState<string | null>(null);
+  const [logPreset, setLogPreset] = React.useState<{ kind: 'call' | 'whatsapp'; n: number } | null>(null);
+  const [rescheduling, setRescheduling] = React.useState<{ taskId: string; title: string } | null>(null);
   const chatContainerRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
@@ -74,22 +107,6 @@ const MainContent: React.FC<MainContentProps> = ({
     }
   }, [selectedLead?.messages, activeContentTab]);
 
-  const handleSendMessage = React.useCallback(() => {
-    if (inputMessage.trim() === '' || !selectedLead) return;
-    const newMessage: Message = {
-      id: uuidv4(),
-      content: inputMessage.trim(),
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      sender: 'sent',
-    };
-    onSendMessage(selectedLead.id, newMessage);
-    setInputMessage('');
-  }, [inputMessage, selectedLead, onSendMessage]);
-
-  const handleKeyPress = React.useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') handleSendMessage();
-  }, [handleSendMessage]);
-  
   const getSiteVisitStatusColorClass = (status: SiteVisitStatus) => {
     switch (status) {
       case 'Visit Scheduled': return 'bg-indigo-600';
@@ -118,21 +135,7 @@ const MainContent: React.FC<MainContentProps> = ({
               <MessageBubble key={message.id} message={message} />
             ))}
           </div>
-          <div className="bg-[var(--medium-bg)] px-3 py-2.5 flex items-center gap-2 border-t border-[var(--border-color)]">
-            <input
-              type="text"
-              aria-label="Add a note"
-              className="flex-1 min-w-0 h-10 bg-[var(--input-bg)] rounded-full px-4 text-sm border border-[var(--border-color)] text-[var(--text-primary)] outline-none focus:border-[var(--primary-color)] transition-colors placeholder:text-[var(--text-secondary)]"
-              placeholder="Add a note, call summary or update…"
-              value={inputMessage}
-              onChange={(e) => setInputMessage(e.target.value)}
-              onKeyDown={handleKeyPress}
-            />
-            <button onClick={handleSendMessage} disabled={!inputMessage.trim()} aria-label="Save note" title="Save note"
-              className="bg-[var(--primary-color)] w-10 h-10 shrink-0 rounded-full flex items-center justify-center text-white transition-opacity disabled:opacity-40 hover:opacity-90">
-              <i className="fas fa-paper-plane text-sm" aria-hidden="true"></i>
-            </button>
-          </div>
+          <LogUpdateBar lead={selectedLead} focusTaskId={focusTaskId} preset={logPreset} onClearFocus={() => setFocusTaskId(null)} onSave={(payload) => onLogUpdate(selectedLead.id, payload)} />
         </>
       );
     }
@@ -154,6 +157,12 @@ const MainContent: React.FC<MainContentProps> = ({
               <span className={`shrink-0 text-xs whitespace-nowrap ${e.when === 'overdue' ? 'text-red-500 font-semibold' : 'text-[var(--text-secondary)]'}`}>{[friendlyDate(e.date), e.time && time12(e.time)].filter(Boolean).join(', ')}</span>
             </div>
             {e.detail && <p className="text-xs text-[var(--text-secondary)] mt-0.5 whitespace-pre-line break-words">{e.detail}</p>}
+            {e.taskId && e.when !== 'done' && (
+              <div className="mt-1.5 flex gap-2">
+                <button type="button" onClick={() => { setFocusTaskId(e.taskId!); setActiveContentTab('chat'); }} className="h-7 px-2.5 rounded-lg text-xs font-semibold bg-green-600 text-white hover:bg-green-700"><i className="fas fa-check mr-1" aria-hidden="true"></i>Done</button>
+                <button type="button" onClick={() => setRescheduling({ taskId: e.taskId!, title: e.title })} className="h-7 px-2.5 rounded-lg text-xs font-semibold border border-[var(--border-color)] text-[var(--text-primary)] hover:bg-[var(--light-bg)]">Reschedule</button>
+              </div>
+            )}
           </div>
         </li>
       );
@@ -250,8 +259,8 @@ const MainContent: React.FC<MainContentProps> = ({
         <div className="flex flex-col items-end justify-center gap-0.5 shrink-0">
           <div className="hidden md:block">{idChips}</div>
           <div className="flex items-center">
-          {selectedLead.phone && <button type="button" onClick={() => callNumber(selectedLead.phone)} className={iconBtn} aria-label="Call" title="Call"><i className="fas fa-phone-alt text-sm" aria-hidden="true"></i></button>}
-          {selectedLead.phone && <button type="button" onClick={() => openWhatsApp(selectedLead.phone)} className={iconBtn} aria-label="Open WhatsApp" title="Open WhatsApp"><i className="fab fa-whatsapp text-base" aria-hidden="true"></i></button>}
+          {selectedLead.phone && <button type="button" onClick={() => { callNumber(selectedLead.phone); setLogPreset(p => ({ kind: 'call', n: (p?.n || 0) + 1 })); setActiveContentTab('chat'); }} className={iconBtn} aria-label="Call" title="Call"><i className="fas fa-phone-alt text-sm" aria-hidden="true"></i></button>}
+          {selectedLead.phone && <button type="button" onClick={() => { openWhatsApp(selectedLead.phone); setLogPreset(p => ({ kind: 'whatsapp', n: (p?.n || 0) + 1 })); setActiveContentTab('chat'); }} className={iconBtn} aria-label="Open WhatsApp" title="Open WhatsApp, then log it here"><i className="fab fa-whatsapp text-base" aria-hidden="true"></i></button>}
           <button onClick={onToggleFollowUpModal} className={iconBtn} aria-label="Schedule follow-up" title="Schedule follow-up"><i className="fas fa-bell text-sm" aria-hidden="true"></i></button>
           {onToggleSiteVisitModal && <button onClick={onToggleSiteVisitModal} className={iconBtn} aria-label="Schedule site visit" title="Schedule site visit"><i className="fas fa-map-marker-alt text-sm" aria-hidden="true"></i></button>}
           <button onClick={() => onToggleEditLeadModal(selectedLead)} className={iconBtn} aria-label="Edit lead" title="Edit lead"><i className="fas fa-pen text-sm" aria-hidden="true"></i></button>
@@ -283,6 +292,7 @@ const MainContent: React.FC<MainContentProps> = ({
       <div className="flex-1 overflow-hidden flex flex-col">
         {renderContent()}
       </div>
+      <RescheduleModal target={rescheduling} onClose={() => setRescheduling(null)} onSave={(date, time) => rescheduling && onRescheduleFollowUp(selectedLead.id, rescheduling.taskId, date, time)} />
     </div>
   );
 };

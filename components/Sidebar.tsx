@@ -504,7 +504,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Signed-in user */}
-      <div className="px-2.5 py-2 flex justify-between items-center border-t border-[var(--border-color)] flex-shrink-0 bg-[var(--medium-bg)]">
+      <div className="px-2.5 py-2 md:py-0 md:h-[64px] flex justify-between items-center border-t border-[var(--border-color)] flex-shrink-0 bg-[var(--medium-bg)]">
           <div className="flex items-center gap-2 min-w-0">
             <div className="min-w-0">
                 <div className="font-semibold text-[var(--text-primary)] text-xs truncate leading-tight">{currentUser?.name || 'Signed in'}</div>
