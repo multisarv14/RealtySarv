@@ -337,7 +337,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   return (
     <div className="bg-[var(--medium-bg)] w-full flex flex-col h-full border-r border-[var(--border-color)] overflow-hidden">
       {/* Menu Grid */}
-      <div className="border-b border-[var(--border-color)] bg-[var(--dark-bg)] grid flex-shrink-0" style={{ gridTemplateColumns: `repeat(${Math.max(menuItems.length, 1)}, minmax(0, 1fr))` }}>
+      <div className="border-b border-[var(--border-color)] bg-[var(--dark-bg)] grid flex-shrink-0 md:h-[56px]" style={{ gridTemplateColumns: `repeat(${Math.max(menuItems.length, 1)}, minmax(0, 1fr))` }}>
         {menuItems.map(item => (
           <button key={item.id} onClick={() => { setActiveMenu(item.id); onClearSelection?.(); }} className={`flex flex-col items-center justify-center py-1.5 transition-colors border-b-2 ${activeMenu === item.id ? 'bg-[var(--light-bg)] text-[var(--primary-color)] border-[var(--primary-color)]' : 'text-[var(--text-secondary)] border-transparent hover:text-[var(--text-primary)]'}`}>
               <i className={`${item.icon} text-[13px] mb-0.5`} aria-hidden="true"></i>
@@ -347,7 +347,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Search + actions */}
-      <div className="relative px-2.5 py-2 border-b border-[var(--border-color)] flex items-center gap-1.5 flex-shrink-0 bg-[var(--medium-bg)]">
+      <div className="relative px-2.5 py-2 md:py-0 md:h-[52px] border-b border-[var(--border-color)] flex items-center gap-1.5 flex-shrink-0 bg-[var(--medium-bg)]">
           <div className="relative flex-1 min-w-0">
               <i className="fas fa-search absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] text-[var(--text-secondary)] pointer-events-none" aria-hidden="true"></i>
               <input
@@ -429,7 +429,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Sub-tabs */}
-      <div role="tablist" className="flex gap-1.5 px-2.5 py-2 bg-[var(--dark-bg)] border-b border-[var(--border-color)] flex-shrink-0 overflow-x-auto no-scrollbar">
+      <div role="tablist" className="flex items-center gap-1.5 px-2.5 py-2 md:py-0 md:h-[52px] bg-[var(--dark-bg)] border-b border-[var(--border-color)] flex-shrink-0 overflow-x-auto no-scrollbar">
           {(activeMenu === 'Leads' ? leadTabs : activeMenu === 'Visits' ? visitTabs : activeMenu === 'Booking' ? bookingTabs : activeMenu === 'Agreement' ? agreementTabs : possessionTabs).map(tab => {
             const current = (activeMenu === 'Leads' ? activeLeadTab : activeMenu === 'Visits' ? activeVisitTab : activeMenu === 'Booking' ? activeBookingTab : activeMenu === 'Agreement' ? activeAgreementTab : activePossessionTab);
             const active = current === tab;

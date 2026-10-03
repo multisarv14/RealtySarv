@@ -217,12 +217,23 @@ const MainContent: React.FC<MainContentProps> = ({
 
   const step = getPipelineStep(selectedLead);
   const tabLabel = (tab: ContentTab) => tab === 'chat' ? 'Activity' : tab === 'history' || tab === 'siteVisit' ? 'Timeline' : tab === 'documents' ? 'Files' : tab.charAt(0).toUpperCase() + tab.slice(1);
-  const iconBtn = 'h-9 w-9 shrink-0 rounded-lg flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--primary-color)] hover:bg-[var(--light-bg)] transition-colors';
+  const iconBtn = 'h-9 w-9 md:h-7 md:w-7 shrink-0 rounded-lg flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--primary-color)] hover:bg-[var(--light-bg)] transition-colors';
+
+  // Lead ID, Customer ID and the date the lead came in: small chips (the two IDs copy on click).
+  const idChips = (
+    <div className="text-[10.5px] text-[var(--text-secondary)] flex items-center gap-1.5 flex-nowrap justify-end overflow-x-auto no-scrollbar">
+      {([['Lead ID', leadCode(selectedLead)], ['Customer ID', customerCode(selectedLead)]] as const).map(([label, value]) => (
+        <button key={label} type="button" title={`Copy ${label}`} onClick={() => { navigator.clipboard?.writeText(value); toast.info(`${label} ${value} copied.`); }}
+          className="font-mono px-1.5 py-px rounded bg-[var(--light-bg)] hover:text-[var(--text-primary)] transition-colors whitespace-nowrap"><span className="font-sans opacity-70">{label}</span> {value}</button>
+      ))}
+      {selectedLead.leadDate && <span className="px-1.5 py-px rounded bg-[var(--light-bg)] whitespace-nowrap" title="The day this lead came in"><span className="opacity-70">Lead date</span> {new Date(selectedLead.leadDate + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>}
+    </div>
+  );
 
   return (
     <div className="flex-1 min-w-0 main-content-bg flex flex-col relative h-full">
       {/* Lead header */}
-      <div className="bg-[var(--medium-bg)] pl-3 pr-2 py-2 flex justify-between items-center gap-2 border-b border-[var(--border-color)] flex-shrink-0 z-20">
+      <div className="bg-[var(--medium-bg)] pl-3 pr-2 py-2 md:py-0 md:h-[56px] flex justify-between items-center gap-2 border-b border-[var(--border-color)] flex-shrink-0 z-20">
         <div className="flex items-center gap-2.5 min-w-0">
           <button onClick={onBackButtonClick} aria-label="Back to leads" className="md:hidden h-9 w-9 shrink-0 flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)]"><i className="fas fa-arrow-left" aria-hidden="true"></i></button>
           <div className="min-w-0">
@@ -233,25 +244,23 @@ const MainContent: React.FC<MainContentProps> = ({
             <div className="text-[11.5px] text-[var(--text-secondary)] truncate" data-testid="lead-facts">
               {[selectedLead.leadProject && selectedLead.leadProject !== 'Not Assigned' ? selectedLead.leadProject : 'No project', [selectedLead.channelSource, selectedLead.leadSource].filter(Boolean).join(' › '), `Owner ${users.find(u => u.id === selectedLead.ownerId)?.name || 'unassigned'}`].filter(Boolean).join(' · ')}
             </div>
-            <div className="text-[10.5px] text-[var(--text-secondary)] truncate flex items-center gap-1.5">
-              {([['Lead ID', leadCode(selectedLead)], ['Customer ID', customerCode(selectedLead)]] as const).map(([label, value]) => (
-                <button key={label} type="button" title={`Copy ${label}`} onClick={() => { navigator.clipboard?.writeText(value); toast.info(`${label} ${value} copied.`); }}
-                  className="font-mono px-1.5 py-px rounded bg-[var(--light-bg)] hover:text-[var(--text-primary)] transition-colors"><span className="font-sans opacity-70">{label}</span> {value}</button>
-              ))}
-            </div>
+            <div className="md:hidden pt-0.5 max-w-full">{idChips}</div>
           </div>
         </div>
-        <div className="flex items-center shrink-0">
+        <div className="flex flex-col items-end justify-center gap-0.5 shrink-0">
+          <div className="hidden md:block">{idChips}</div>
+          <div className="flex items-center">
           {selectedLead.phone && <button type="button" onClick={() => callNumber(selectedLead.phone)} className={iconBtn} aria-label="Call" title="Call"><i className="fas fa-phone-alt text-sm" aria-hidden="true"></i></button>}
           {selectedLead.phone && <button type="button" onClick={() => openWhatsApp(selectedLead.phone)} className={iconBtn} aria-label="Open WhatsApp" title="Open WhatsApp"><i className="fab fa-whatsapp text-base" aria-hidden="true"></i></button>}
           <button onClick={onToggleFollowUpModal} className={iconBtn} aria-label="Schedule follow-up" title="Schedule follow-up"><i className="fas fa-bell text-sm" aria-hidden="true"></i></button>
           {onToggleSiteVisitModal && <button onClick={onToggleSiteVisitModal} className={iconBtn} aria-label="Schedule site visit" title="Schedule site visit"><i className="fas fa-map-marker-alt text-sm" aria-hidden="true"></i></button>}
           <button onClick={() => onToggleEditLeadModal(selectedLead)} className={iconBtn} aria-label="Edit lead" title="Edit lead"><i className="fas fa-pen text-sm" aria-hidden="true"></i></button>
+          </div>
         </div>
       </div>
 
       {/* Tabs */}
-      <div role="tablist" className="bg-[var(--dark-bg)] border-b border-[var(--border-color)] flex-shrink-0 overflow-x-auto no-scrollbar z-10 flex">
+      <div role="tablist" className="bg-[var(--dark-bg)] border-b border-[var(--border-color)] flex-shrink-0 overflow-x-auto no-scrollbar z-10 flex md:h-[52px] items-stretch">
         {(['chat', 'history', 'details', 'booking', 'ledger', 'documents'] as ContentTab[]).map(tab => {
            // Only show Ledger if booked
            if (tab === 'ledger' && selectedLead.bookingStatus !== 'Booked') return null;
@@ -260,7 +269,7 @@ const MainContent: React.FC<MainContentProps> = ({
                 key={tab}
                 role="tab"
                 aria-selected={activeContentTab === tab}
-                className={`px-4 py-2 cursor-pointer border-b-2 transition-colors text-xs font-semibold whitespace-nowrap
+                className={`px-4 py-2 flex items-center cursor-pointer border-b-2 transition-colors text-xs font-semibold whitespace-nowrap
                 ${activeContentTab === tab ? 'border-[var(--primary-color)] text-[var(--primary-color)]' : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
                 onClick={() => setActiveContentTab(tab)}
             >

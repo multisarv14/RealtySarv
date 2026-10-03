@@ -72,3 +72,15 @@ body {
 
 .perspective-1000 { perspective: 1000px; }
 .rotate-x-5 { transform: rotateX(5deg); }
+
+/* Native form controls follow the app theme (not the operating system): the date/time picker icon and select arrows
+   become light on the dark theme, and number boxes lose the clunky spinner (people type amounts). */
+body:not(.light) { color-scheme: dark; }
+body.light { color-scheme: light; }
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+input[type='number'] { -moz-appearance: textfield; appearance: textfield; }
+input[type='date']::-webkit-calendar-picker-indicator,
+input[type='time']::-webkit-calendar-picker-indicator { cursor: pointer; opacity: 0.8; }
+input[type='date']::-webkit-calendar-picker-indicator:hover,
+input[type='time']::-webkit-calendar-picker-indicator:hover { opacity: 1; }

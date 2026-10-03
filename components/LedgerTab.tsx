@@ -15,30 +15,22 @@ interface LedgerTabProps {
 
 type LedgerSubTab = 'Payment History' | 'Plan & Demands' | 'Settlement' | 'Notices & Letters';
 
-const NoticeRow: React.FC<{ name: string; icon: string; description: string; onGenerate: () => void }> = ({ name, icon, description, onGenerate }) => (
-    <div className="bg-[var(--dark-bg)] p-4 rounded-xl border border-[var(--light-bg)] flex items-center gap-4 group hover:border-[var(--primary-color)] transition-all shadow-sm mb-3">
-        <div className="w-12 h-12 flex-shrink-0 flex items-center justify-center rounded-lg bg-[var(--medium-bg)] text-[var(--primary-color)] text-xl border border-[var(--light-bg)] group-hover:bg-[var(--primary-color)] group-hover:text-white transition-colors">
-            <i className={icon}></i>
-        </div>
+const NoticeRow: React.FC<{ name: string; icon: string; description: string; badge?: string; onGenerate: () => void }> = ({ name, icon, description, badge, onGenerate }) => (
+    <li className="flex items-center gap-4 px-4 py-3.5 hover:bg-[var(--dark-bg)] transition-colors">
+        <span className="w-10 h-10 shrink-0 flex items-center justify-center rounded-lg bg-[var(--medium-bg)] text-[var(--primary-color)] border border-[var(--light-bg)]" aria-hidden="true"><i className={icon}></i></span>
         <div className="flex-1 min-w-0">
-            <h4 className="font-semibold text-[var(--text-primary)] text-sm uppercase tracking-tight">{name}</h4>
-            <p className="text-[11px] text-[var(--text-secondary)] mt-1">{description}</p>
+            <h4 className="font-semibold text-[var(--text-primary)] text-sm flex items-center gap-2">{name}{badge && <span className="text-[10px] font-semibold px-1.5 py-px rounded-full bg-red-500/15 text-red-500">{badge}</span>}</h4>
+            <p className="text-xs text-[var(--text-secondary)] mt-0.5">{description}</p>
         </div>
-        <div className="flex-shrink-0">
-            <button
-                onClick={onGenerate}
-                className="px-4 py-2 rounded text-[10px] bg-[var(--medium-bg)] text-[var(--primary-color)] font-semibold uppercase hover:bg-[var(--primary-color)] hover:text-white border border-[var(--primary-color)]/20 transition-all shadow-sm"
-            >
-                Generate Letter
-            </button>
-        </div>
-    </div>
+        <button onClick={onGenerate} aria-label={`Generate ${name}`} className="shrink-0 px-3.5 py-1.5 rounded-lg text-xs bg-[var(--medium-bg)] text-[var(--primary-color)] font-semibold hover:bg-[var(--primary-color)] hover:text-white border border-[var(--primary-color)]/40 transition-colors">Generate</button>
+    </li>
 );
 
 const LedgerTab: React.FC<LedgerTabProps> = ({ lead, project, paymentPlans, onUpdateBooking }) => {
   const [activeSubTab, setActiveSubTab] = React.useState<LedgerSubTab>('Payment History');
   const [showPaymentModal, setShowPaymentModal] = React.useState(false);
   const [showDemandModal, setShowDemandModal] = React.useState(false);
+  const [demandFor, setDemandFor] = React.useState<string | undefined>(undefined);
   const [viewingDoc, setViewingDoc] = React.useState<{ type: any, data: any } | null>(null);
   
   // State for settlement allocation
@@ -127,204 +119,175 @@ const LedgerTab: React.FC<LedgerTabProps> = ({ lead, project, paymentPlans, onUp
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-[var(--medium-bg)] animate-fadeIn">
-        {/* Sub-tabs Navigation */}
-        <div className="border-b border-[var(--light-bg)] flex-shrink-0 bg-[var(--dark-bg)]/50">
-            <nav className="flex px-4">
-                {(['Payment History', 'Plan & Demands', 'Settlement', 'Notices & Letters'] as LedgerSubTab[]).map(tab => (
-                    <button
-                        key={tab}
-                        onClick={() => setActiveSubTab(tab)}
-                        className={`px-6 py-3 text-[10px] font-semibold uppercase tracking-widest transition-all border-b-2 ${
-                            activeSubTab === tab 
-                            ? 'border-[var(--primary-color)] text-[var(--primary-color)]' 
-                            : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                        }`}
-                    >
-                        {tab}
-                    </button>
-                ))}
-            </nav>
+        {/* Sub-tabs */}
+        <div role="tablist" className="flex items-center gap-1.5 px-4 py-2.5 md:py-0 md:h-[52px] border-b border-[var(--light-bg)] flex-shrink-0 bg-[var(--dark-bg)] overflow-x-auto no-scrollbar">
+            {(['Payment History', 'Plan & Demands', 'Settlement', 'Notices & Letters'] as LedgerSubTab[]).map(tab => (
+                <button key={tab} role="tab" aria-selected={activeSubTab === tab} onClick={() => setActiveSubTab(tab)}
+                    className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors ${activeSubTab === tab ? 'bg-[var(--primary-color)] text-white shadow-sm' : 'bg-[var(--medium-bg)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--light-bg)]'}`}>
+                    {tab === 'Payment History' ? 'Payments' : tab === 'Plan & Demands' ? 'Plan and demands' : tab === 'Notices & Letters' ? 'Letters' : tab}
+                </button>
+            ))}
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
-            {activeSubTab === 'Payment History' && (
-                <div className="max-w-4xl mx-auto animate-fadeIn">
-                    <div className="flex justify-between items-center mb-6">
-                        <h4 className="text-sm font-semibold text-[var(--text-primary)] uppercase tracking-wider">Transaction Ledger</h4>
-                        <button onClick={() => setShowPaymentModal(true)} className="px-4 py-1.5 bg-[var(--primary-color)] text-white text-[10px] font-semibold uppercase rounded shadow hover:brightness-110 transition-all">
-                            + Add Receipt
-                        </button>
+            {activeSubTab === 'Payment History' && (() => {
+                // One chronological ledger (token first), with the balance left after each receipt.
+                const rows = [
+                    { id: 'token', date: tokenDetails.transactionDate, title: 'Booking token', ref: [tokenDetails.mode, tokenDetails.bankName, tokenDetails.transactionId && `TXN ${tokenDetails.transactionId}`].filter(Boolean).join(' · '), amount: tokenDetails.amount || 0, receipt: null as PaymentRecord | null },
+                    ...payments.map(pm => ({ id: pm.id, date: pm.date, title: pm.milestoneName || 'Part payment', ref: [pm.mode, pm.bankName, pm.transactionId && `TXN ${pm.transactionId}`].filter(Boolean).join(' · '), amount: pm.amount, receipt: pm })),
+                ].sort((x, y) => String(x.date).localeCompare(String(y.date)));
+                let running = totalDue;
+                const withBalance = rows.map(r => { running -= r.amount; return { ...r, balance: running }; });
+                const pct = totalDue > 0 ? Math.min(100, Math.round((totalPaid / totalDue) * 100)) : 0;
+                const inr = (n: number) => `₹${Math.round(n).toLocaleString('en-IN')}`;
+                return (
+                <div className="max-w-5xl mx-auto animate-fadeIn space-y-5" data-testid="ledger-payments">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div className="bg-[var(--dark-bg)] rounded-xl border border-[var(--light-bg)] p-4"><p className="text-[11px] text-[var(--text-secondary)]">Agreement value</p><p className="text-xl font-bold text-[var(--text-primary)]">{inr(totalDue)}</p></div>
+                        <div className="bg-[var(--dark-bg)] rounded-xl border border-[var(--light-bg)] p-4"><p className="text-[11px] text-[var(--text-secondary)]">Paid so far</p><p className="text-xl font-bold text-green-500">{inr(totalPaid)}</p>
+                            <div className="mt-2 h-1.5 rounded-full bg-[var(--light-bg)] overflow-hidden" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label="Paid"><div className="h-full bg-green-500" style={{ width: `${pct}%` }}></div></div>
+                            <p className="mt-1 text-[11px] text-[var(--text-secondary)]">{pct}% of the agreement value</p></div>
+                        <div className="bg-[var(--dark-bg)] rounded-xl border border-[var(--light-bg)] p-4"><p className="text-[11px] text-[var(--text-secondary)]">Balance</p><p className={`text-xl font-bold ${totalDue - totalPaid > 0 ? 'text-red-500' : 'text-green-500'}`}>{inr(Math.max(totalDue - totalPaid, 0))}</p></div>
                     </div>
 
-                    <div className="space-y-4">
-                         {/* Token Entry (Always First) */}
-                         <div className="bg-[var(--dark-bg)] p-4 rounded-xl border-l-4 border-l-blue-500 border border-[var(--light-bg)] flex justify-between items-center">
-                            <div>
-                                <p className="text-xs font-semibold text-[var(--text-primary)] uppercase tracking-tight">Booking Token Amount</p>
-                                <p className="text-[10px] text-[var(--text-secondary)] font-mono mt-1">{tokenDetails.mode} • TXN: {tokenDetails.transactionId}</p>
-                            </div>
-                            <div className="text-right">
-                                <p className="text-base font-bold text-green-500">₹{tokenDetails.amount.toLocaleString('en-IN')}</p>
-                                <p className="text-[9px] font-bold text-gray-500 uppercase mt-1">{tokenDetails.transactionDate}</p>
-                            </div>
+                    <div className="flex justify-between items-center">
+                        <h4 className="text-sm font-semibold text-[var(--text-primary)]">Receipts <span className="font-normal text-[var(--text-secondary)]">· {rows.length}</span></h4>
+                        <button onClick={() => setShowPaymentModal(true)} className="px-3.5 py-1.5 bg-[var(--primary-color)] text-white text-xs font-semibold rounded-lg shadow hover:brightness-110 transition-all">+ Add receipt</button>
+                    </div>
+
+                    <div className="border border-[var(--light-bg)] rounded-xl overflow-hidden">
+                        <div className="hidden md:grid grid-cols-[96px_minmax(0,1.6fr)_minmax(0,1.4fr)_120px_120px_90px] gap-3 px-4 py-2 bg-[var(--dark-bg)] text-[11px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+                            <span>Date</span><span>For</span><span>Mode and reference</span><span className="text-right">Amount</span><span className="text-right">Balance</span><span></span>
                         </div>
-
-                        {payments.length === 0 && <p className="text-center py-12 text-sm text-gray-500 italic">No additional receipts recorded yet.</p>}
-                        
-                        {payments.map(payment => (
-                            <div key={payment.id} className="bg-[var(--dark-bg)] p-4 rounded-xl border border-[var(--light-bg)] flex justify-between items-center group hover:border-[var(--primary-color)] transition-colors">
-                                <div>
-                                    <p className="text-xs font-semibold text-[var(--text-primary)] uppercase tracking-tight">{payment.milestoneName || 'Part Payment Entry'}</p>
-                                    <p className="text-[10px] text-[var(--text-secondary)] font-mono mt-1">{payment.mode} • {payment.bankName || 'N/A'}</p>
-                                </div>
-                                <div className="text-right">
-                                    <p className="text-base font-bold text-green-500">₹{payment.amount.toLocaleString('en-IN')}</p>
-                                    <div className="flex items-center gap-3 justify-end mt-1">
-                                        <p className="text-[9px] font-bold text-gray-500 uppercase">{payment.date}</p>
-                                        <button onClick={() => setViewingDoc({ type: 'Payment Receipt', data: payment })} className="text-[9px] font-semibold uppercase text-blue-500 hover:underline">Receipt</button>
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {activeSubTab === 'Plan & Demands' && (
-                <div className="max-w-4xl mx-auto animate-fadeIn">
-                    <div className="flex justify-between items-center mb-6">
-                        <h4 className="text-sm font-semibold text-[var(--text-primary)] uppercase tracking-wider">Demands & Milestones</h4>
-                        <button onClick={() => setShowDemandModal(true)} className="px-4 py-1.5 bg-blue-600 text-white text-[10px] font-semibold uppercase rounded shadow hover:brightness-110 transition-all">
-                            Raise Demand
-                        </button>
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-4">
-                        {plan?.milestones.map((milestone) => {
-                            const demand = demands.find(d => d.milestoneId === milestone.id);
-                            const isPaid = payments.some(p => p.milestoneName === milestone.name) || (milestone.name === 'On Booking' && tokenDetails.amount > 0);
-                            const milestoneAmount = priceBreakup.totalConsideration * (milestone.percentage / 100);
-
-                            return (
-                                <div key={milestone.id} className={`p-5 rounded-xl border transition-all ${demand ? 'bg-[var(--dark-bg)] border-blue-500/30' : 'bg-transparent border-[var(--light-bg)]'}`}>
-                                    <div className="flex justify-between items-start">
-                                        <div>
-                                            <p className="font-semibold text-sm text-[var(--text-primary)] uppercase">{milestone.name}</p>
-                                            <p className="text-xs font-bold text-blue-500 mt-1">{milestone.percentage}% of Value (₹{milestoneAmount.toLocaleString('en-IN')})</p>
-                                        </div>
-                                        {isPaid ? (
-                                            <span className="bg-green-500/10 text-green-500 text-[9px] font-semibold px-2 py-1 rounded-full border border-green-500/20 uppercase"><i className="fas fa-check-circle mr-1"></i> Settled</span>
-                                        ) : demand ? (
-                                            <span className="bg-orange-500/10 text-orange-500 text-[9px] font-semibold px-2 py-1 rounded-full border border-orange-500/20 uppercase"><i className="fas fa-clock mr-1"></i> Overdue</span>
-                                        ) : (
-                                            <span className="bg-gray-500/10 text-gray-500 text-[9px] font-semibold px-2 py-1 rounded-full border border-gray-500/20 uppercase">Upcoming</span>
-                                        )}
-                                    </div>
-                                    
-                                    {demand && (
-                                        <div className="mt-4 pt-4 border-t border-[var(--light-bg)] flex justify-between items-center text-[10px]">
-                                            <div className="flex gap-6">
-                                                <p className="text-gray-500">Raised: <span className="text-[var(--text-primary)] font-bold">{demand.generatedDate}</span></p>
-                                                <p className="text-gray-500">Due: <span className="text-[var(--text-primary)] font-bold">{demand.dueDate}</span></p>
-                                            </div>
-                                            <button onClick={() => setViewingDoc({ type: 'Demand Letter', data: { milestone, demandDate: demand.generatedDate, dueDate: demand.dueDate, milestoneDate: demand.milestoneDate } })} className="text-blue-500 font-semibold uppercase hover:underline">Download Letter</button>
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
-            )}
-
-            {activeSubTab === 'Settlement' && (
-                <div className="max-w-4xl mx-auto animate-fadeIn">
-                    <div className="bg-[var(--dark-bg)] p-6 rounded-xl border border-[var(--light-bg)] mb-6 flex justify-between items-center">
-                        <div>
-                            <h4 className="text-xs font-bold uppercase text-[var(--text-secondary)] tracking-wider mb-1">Fund Allocation Status</h4>
-                            <p className="text-[10px] text-gray-500">Allocate total received funds (₹{totalPaid.toLocaleString()}) against cost heads.</p>
-                        </div>
-                        <div className="text-right">
-                             <p className="text-[10px] font-bold text-[var(--text-secondary)] uppercase">Remaining Balance</p>
-                             <p className={`text-2xl font-bold ${unallocatedAmount < 0 ? 'text-red-500' : 'text-green-500'}`}>₹{unallocatedAmount.toLocaleString('en-IN')}</p>
-                        </div>
-                    </div>
-
-                    <div className="overflow-x-auto rounded-xl border border-[var(--light-bg)] bg-[var(--dark-bg)]">
-                        <table className="w-full text-[11px] text-left">
-                            <thead className="text-[var(--text-secondary)] bg-[var(--medium-bg)] font-semibold uppercase tracking-widest">
-                                <tr>
-                                    <th className="p-4 border-b border-[var(--light-bg)]">Agreement Component</th>
-                                    <th className="p-4 border-b border-[var(--light-bg)] text-right">Target (INR)</th>
-                                    <th className="p-4 border-b border-[var(--light-bg)] text-right">Settled (INR)</th>
-                                    <th className="p-4 border-b border-[var(--light-bg)] text-right">Variance</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-[var(--light-bg)]">
-                                {costHeads.map(head => {
-                                    const due = (priceBreakup as any)[head.key] || (priceBreakup.customCharges && priceBreakup.customCharges[head.key]) || 0;
-                                    if (due === 0) return null;
-                                    const settled = tempSettlement[head.key] || 0;
-                                    const balance = due - settled;
-                                    return (
-                                        <tr key={head.key} className="hover:bg-[var(--medium-bg)]/30 transition-colors">
-                                            <td className="p-4 font-bold text-[var(--text-primary)]">{head.label}</td>
-                                            <td className="p-4 text-right text-gray-500 font-mono">₹{due.toLocaleString('en-IN')}</td>
-                                            <td className="p-4 text-right">
-                                                <input type="number" value={settled} onChange={(e) => handleSettlementChange(head.key, e.target.value)} className="bg-[var(--medium-bg)] border border-[var(--light-bg)] rounded px-3 py-1 text-right text-[var(--text-primary)] w-36 focus:outline-none focus:border-[var(--primary-color)] font-mono" />
-                                            </td>
-                                            <td className={`p-4 text-right font-bold font-mono ${balance > 0 ? 'text-red-400' : 'text-green-400'}`}>₹{balance.toLocaleString('en-IN')}</td>
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
-                    </div>
-                    <div className="mt-6 flex justify-end">
-                        <button onClick={handleSaveSettlement} className="px-8 py-2 bg-[var(--primary-color)] text-white text-[11px] font-semibold uppercase rounded shadow hover:brightness-110 transition-all">
-                            Synchronize Ledger
-                        </button>
-                    </div>
-                </div>
-            )}
-
-            {activeSubTab === 'Notices & Letters' && (
-                <div className="max-w-4xl mx-auto animate-fadeIn">
-                    <div className="mb-6 flex justify-between items-center">
-                        <div>
-                            <h4 className="text-sm font-semibold text-[var(--text-primary)] uppercase tracking-wider">Financial Notices & Statutory Letters</h4>
-                            <p className="text-[11px] text-[var(--text-secondary)] mt-1">Generate automated compliance and financial communication for the customer.</p>
-                        </div>
-                    </div>
-
-                    <div className="flex flex-col">
-                        {financialNotices.map((notice) => (
-                            <NoticeRow 
-                                key={notice.name}
-                                name={notice.name}
-                                icon={notice.icon}
-                                description={notice.description}
-                                onGenerate={() => setViewingDoc({ type: notice.name, data: { lead, project } })}
-                            />
-                        ))}
-                    </div>
-
-                    <div className="mt-8 p-6 bg-blue-500/5 rounded-xl border border-blue-500/20">
-                        <h5 className="text-xs font-semibold text-blue-400 uppercase tracking-widest mb-2 flex items-center gap-2">
-                            <i className="fas fa-info-circle"></i> Operational Guidelines
-                        </h5>
-                        <ul className="text-[11px] text-[var(--text-secondary)] space-y-2 list-disc pl-4">
-                            <li>Letters generated here use real-time data from the <strong>Transaction Ledger</strong>.</li>
-                            <li>Ensure all payment receipts are recorded before generating an <strong>Interest Letter</strong>.</li>
-                            <li>Notices generated are archived in the unit history automatically for future audit trails.</li>
+                        <ul className="divide-y divide-[var(--light-bg)]">
+                            {withBalance.map(r => (
+                                <li key={r.id} className="grid grid-cols-2 md:grid-cols-[96px_minmax(0,1.6fr)_minmax(0,1.4fr)_120px_120px_90px] gap-x-3 gap-y-1 items-center px-4 py-3 hover:bg-[var(--dark-bg)] transition-colors">
+                                    <span className="text-xs text-[var(--text-secondary)]">{r.date}</span>
+                                    <span className="text-sm font-semibold text-[var(--text-primary)] truncate md:col-auto col-span-2 md:order-none -order-1">{r.title}</span>
+                                    <span className="text-xs text-[var(--text-secondary)] truncate col-span-2 md:col-auto">{r.ref || 'No reference'}</span>
+                                    <span className="text-sm font-bold text-green-500 md:text-right">{inr(r.amount)}</span>
+                                    <span className="text-xs text-[var(--text-secondary)] md:text-right"><span className="md:hidden">Balance </span>{inr(Math.max(r.balance, 0))}</span>
+                                    <span className="md:text-right col-span-2 md:col-auto">{r.receipt ? <button onClick={() => setViewingDoc({ type: 'Payment Receipt', data: r.receipt })} className="text-xs font-semibold text-blue-500 hover:underline">Receipt</button> : <span className="text-[11px] text-[var(--text-secondary)] whitespace-nowrap">With booking</span>}</span>
+                                </li>
+                            ))}
                         </ul>
                     </div>
                 </div>
-            )}
+                );
+            })()}
+
+            {activeSubTab === 'Plan & Demands' && (() => {
+                const today = new Date().toISOString().split('T')[0];
+                const inr = (n: number) => `₹${Math.round(n).toLocaleString('en-IN')}`;
+                const stages = (plan?.milestones || []).map(milestone => {
+                    const demand = demands.find(d => d.milestoneId === milestone.id);
+                    const settled = payments.some(p => p.milestoneName === milestone.name) || (milestone.name === 'On Booking' && tokenDetails.amount > 0);
+                    const state = settled ? 'Settled' : demand ? (demand.dueDate < today ? 'Overdue' : 'Demand raised') : 'Upcoming';
+                    return { milestone, demand, state, amount: priceBreakup.totalConsideration * (milestone.percentage / 100) };
+                });
+                const done = stages.filter(x => x.state === 'Settled').length;
+                const BADGE: Record<string, string> = { Settled: 'bg-green-500/10 text-green-500 border-green-500/30', Overdue: 'bg-red-500/10 text-red-500 border-red-500/30', 'Demand raised': 'bg-blue-500/10 text-blue-500 border-blue-500/30', Upcoming: 'bg-gray-500/10 text-[var(--text-secondary)] border-gray-500/30' };
+                const open = (id?: string) => { setDemandFor(id); setShowDemandModal(true); };
+                return (
+                <div className="max-w-5xl mx-auto animate-fadeIn space-y-4" data-testid="ledger-plan">
+                    <div className="flex flex-wrap justify-between items-center gap-3">
+                        <div>
+                            <h4 className="text-sm font-semibold text-[var(--text-primary)]">{plan?.name || 'Payment plan'}</h4>
+                            <p className="text-xs text-[var(--text-secondary)]">{done} of {stages.length} stages settled</p>
+                        </div>
+                        <button onClick={() => open(undefined)} className="px-3.5 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg shadow hover:brightness-110 transition-all">Raise demand</button>
+                    </div>
+                    <div className="border border-[var(--light-bg)] rounded-xl overflow-hidden">
+                        <div className="hidden md:grid grid-cols-[minmax(0,1.6fr)_70px_120px_120px_minmax(0,1.5fr)_110px] gap-3 px-4 py-2 bg-[var(--dark-bg)] text-[11px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+                            <span>Stage</span><span>Share</span><span className="text-right">Amount</span><span>Status</span><span>Demand</span><span></span>
+                        </div>
+                        <ul className="divide-y divide-[var(--light-bg)]">
+                            {stages.map(({ milestone, demand, state, amount }) => (
+                                <li key={milestone.id} className="grid grid-cols-2 md:grid-cols-[minmax(0,1.6fr)_70px_120px_120px_minmax(0,1.5fr)_110px] gap-x-3 gap-y-1 items-center px-4 py-3 hover:bg-[var(--dark-bg)] transition-colors">
+                                    <span className="text-sm font-semibold text-[var(--text-primary)] col-span-2 md:col-auto">{milestone.name}</span>
+                                    <span className="text-xs text-[var(--text-secondary)]">{milestone.percentage}%</span>
+                                    <span className="text-sm font-bold text-[var(--text-primary)] md:text-right">{inr(amount)}</span>
+                                    <span><span className={`inline-block text-[11px] font-semibold px-2 py-0.5 rounded-full border ${BADGE[state]}`}>{state}</span></span>
+                                    <span className="text-xs text-[var(--text-secondary)] col-span-2 md:col-auto">{demand ? `Raised ${demand.generatedDate}, due ${demand.dueDate}` : state === 'Settled' ? 'Paid' : 'Not raised yet'}</span>
+                                    <span className="md:text-right col-span-2 md:col-auto">
+                                        {demand ? <button onClick={() => setViewingDoc({ type: 'Demand Letter', data: { milestone, demandDate: demand.generatedDate, dueDate: demand.dueDate, milestoneDate: demand.milestoneDate } })} className="text-xs font-semibold text-blue-500 hover:underline">View letter</button>
+                                            : state === 'Upcoming' ? <button onClick={() => open(milestone.id)} className="text-xs font-semibold text-[var(--primary-color)] hover:underline">Raise demand</button> : null}
+                                    </span>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                </div>
+                );
+            })()}
+
+            {activeSubTab === 'Settlement' && (() => {
+                const inr = (n: number) => `₹${Math.round(n).toLocaleString('en-IN')}`;
+                const heads = costHeads.map(h => ({ ...h, due: (priceBreakup as any)[h.key] || (priceBreakup.customCharges && priceBreakup.customCharges[h.key]) || 0 })).filter(h => h.due !== 0);
+                const allocatedPct = totalPaid > 0 ? Math.min(100, Math.round((currentAllocatedTotal / totalPaid) * 100)) : 0;
+                // Fill the heads in the order shown (price first), each up to its amount, until the money received runs out.
+                const autoAllocate = () => { let left = totalPaid; const next: Record<string, number> = {}; for (const h of heads) { const put = Math.max(Math.min(h.due, left), 0); next[h.key] = put; left -= put; } setTempSettlement(next); };
+                return (
+                <div className="max-w-5xl mx-auto animate-fadeIn space-y-4" data-testid="ledger-settlement">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div className="bg-[var(--dark-bg)] rounded-xl border border-[var(--light-bg)] p-4"><p className="text-[11px] text-[var(--text-secondary)]">Money received</p><p className="text-xl font-bold text-[var(--text-primary)]">{inr(totalPaid)}</p></div>
+                        <div className="bg-[var(--dark-bg)] rounded-xl border border-[var(--light-bg)] p-4"><p className="text-[11px] text-[var(--text-secondary)]">Allocated to components</p><p className="text-xl font-bold text-green-500">{inr(currentAllocatedTotal)}</p>
+                            <div className="mt-2 h-1.5 rounded-full bg-[var(--light-bg)] overflow-hidden"><div className="h-full bg-green-500" style={{ width: `${allocatedPct}%` }}></div></div></div>
+                        <div className="bg-[var(--dark-bg)] rounded-xl border border-[var(--light-bg)] p-4"><p className="text-[11px] text-[var(--text-secondary)]">Left to allocate</p><p className={`text-xl font-bold ${unallocatedAmount < 0 ? 'text-red-500' : unallocatedAmount === 0 ? 'text-green-500' : 'text-amber-500'}`}>{inr(unallocatedAmount)}</p>
+                            {unallocatedAmount < 0 && <p role="alert" className="mt-1 text-[11px] text-red-500">You have allocated more than was received.</p>}</div>
+                    </div>
+                    <div className="flex flex-wrap justify-between items-center gap-3">
+                        <p className="text-xs text-[var(--text-secondary)]">Say which part of the agreement each rupee received has paid for.</p>
+                        <button onClick={autoAllocate} className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-[var(--border-color)] text-[var(--text-primary)] hover:bg-[var(--light-bg)]">Allocate automatically</button>
+                    </div>
+                    <div className="border border-[var(--light-bg)] rounded-xl overflow-hidden">
+                        <div className="hidden md:grid grid-cols-[minmax(0,1.6fr)_140px_160px_140px] gap-3 px-4 py-2 bg-[var(--dark-bg)] text-[11px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+                            <span>Component</span><span className="text-right">Agreement amount</span><span className="text-right">Allocated</span><span className="text-right">Still to allocate</span>
+                        </div>
+                        <ul className="divide-y divide-[var(--light-bg)]">
+                            {heads.map(h => {
+                                const settled = tempSettlement[h.key] || 0; const left = h.due - settled;
+                                return (
+                                    <li key={h.key} className="grid grid-cols-2 md:grid-cols-[minmax(0,1.6fr)_140px_160px_140px] gap-x-3 gap-y-1 items-center px-4 py-2.5 hover:bg-[var(--dark-bg)] transition-colors">
+                                        <span className="text-sm font-semibold text-[var(--text-primary)] col-span-2 md:col-auto">{h.label}</span>
+                                        <span className="text-xs text-[var(--text-secondary)] md:text-right"><span className="md:hidden">Amount </span>{inr(h.due)}</span>
+                                        <span className="md:text-right"><input type="number" min="0" value={settled} onChange={(e) => handleSettlementChange(h.key, e.target.value)} aria-label={`Allocated to ${h.label}`} className="w-32 h-9 px-3 rounded-lg border border-[var(--border-color)] bg-[var(--dark-bg)] text-sm text-right text-[var(--text-primary)] outline-none focus:border-[var(--primary-color)]" /></span>
+                                        <span className={`text-xs font-semibold md:text-right col-span-2 md:col-auto ${left > 0 ? 'text-red-400' : left === 0 ? 'text-green-500' : 'text-amber-500'}`}>{left === 0 ? <><i className="fas fa-check mr-1" aria-hidden="true"></i>Done</> : left < 0 ? `${inr(-left)} extra` : inr(left)}</span>
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                    </div>
+                    <div className="flex justify-end">
+                        <button onClick={handleSaveSettlement} disabled={unallocatedAmount < 0} className="px-5 py-2 bg-[var(--primary-color)] text-white text-sm font-semibold rounded-lg shadow hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed">Save allocation</button>
+                    </div>
+                </div>
+                );
+            })()}
+
+            {activeSubTab === 'Notices & Letters' && (() => {
+                const today = new Date().toISOString().split('T')[0];
+                const overdue = demands.filter(d => d.dueDate < today && !payments.some(p => plan?.milestones.find(m => m.id === d.milestoneId)?.name === p.milestoneName)).length;
+                return (
+                <div className="max-w-5xl mx-auto animate-fadeIn space-y-4" data-testid="ledger-letters">
+                    <div>
+                        <h4 className="text-sm font-semibold text-[var(--text-primary)]">Letters and notices</h4>
+                        <p className="text-xs text-[var(--text-secondary)] mt-0.5">They use the receipts in this ledger, so record payments first.</p>
+                    </div>
+                    <ul className="border border-[var(--light-bg)] rounded-xl overflow-hidden divide-y divide-[var(--light-bg)]">
+                        {financialNotices.map((notice) => (
+                            <NoticeRow key={notice.name} name={notice.name} icon={notice.icon} description={notice.description}
+                                badge={overdue > 0 && (notice.name === 'Payment Reminder' || notice.name === 'Interest Letter') ? `${overdue} overdue` : undefined}
+                                onGenerate={() => setViewingDoc({ type: notice.name, data: { lead, project } })} />
+                        ))}
+                    </ul>
+                </div>
+                );
+            })()}
         </div>
 
         <AddPaymentModal isOpen={showPaymentModal} onClose={() => setShowPaymentModal(false)} onSave={handleAddPayment} milestones={plan?.milestones || []} />
-        <GenerateDemandModal isOpen={showDemandModal} onClose={() => setShowDemandModal(false)} onGenerate={handleGenerateDemand} milestones={plan?.milestones || []} />
+        <GenerateDemandModal isOpen={showDemandModal} onClose={() => setShowDemandModal(false)} onGenerate={handleGenerateDemand} milestones={plan?.milestones || []} initialMilestoneId={demandFor} />
         {viewingDoc && <UnitDocumentViewerModal isOpen={!!viewingDoc} onClose={() => setViewingDoc(null)} templateType={viewingDoc.type} lead={lead} project={project} extraData={viewingDoc.data} />}
     </div>
   );

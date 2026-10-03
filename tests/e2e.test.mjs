@@ -192,7 +192,7 @@ describe('CRM: lists, groups, agenda and privacy (read-only)', () => {
     const facts = await p.getByTestId('lead-facts').innerText();
     assert.match(facts, /(The Grand Towers|Serene Gardens|Orchid Residency) · .+ › .+ · Owner \w+/);
     const head = await p.locator('div.bg-\\[var\\(--medium-bg\\)\\].pl-3').first().innerText();
-    assert.match(head, /Lead ID LD-[0-9A-Z]{6}/); assert.match(head, /Customer ID CU-[0-9A-Z]{6}/);
+    assert.match(head, /Lead ID LD-[0-9A-Z]{6}/); assert.match(head, /Customer ID CU-[0-9A-Z]{6}/); assert.match(head, /Lead date \d{1,2} \w{3} \d{4}/);
     assert.equal(/\d{5}\s?\d{5}/.test(head), false, 'no mobile number in the header');
   });
   test('Timeline: one dated history plus what is still to do; Details: a real journey, no made-up score', async () => {
@@ -205,6 +205,41 @@ describe('CRM: lists, groups, agenda and privacy (read-only)', () => {
     const d = await p.locator('body').innerText();
     assert.match(d, /Journey/i); assert.match(d, /Next step/i); assert.match(d, /step \d of 6/);
     assert.doesNotMatch(d, /Recommendation|Close deal|\bHOT\b/i, 'no invented lead score');
+  });
+  test('Ledger: Plan and demands, Settlement and Letters read in plain words with the real numbers', async () => {
+    await menu(p, MENU.booking); await tab(p, 'Confirmed'); await p.locator('[role=button][tabindex="0"]').first().click(); await p.waitForTimeout(500);
+    await tab(p, 'Ledger');
+    const pill = (n) => p.getByRole('tab', { name: n, exact: true }).first();
+    await pill('Plan and demands').click(); await p.waitForTimeout(300);
+    const plan = await p.getByTestId('ledger-plan').innerText();
+    assert.match(plan, /stages settled/); assert.match(plan, /Settled|Upcoming|Overdue|Demand raised/);
+    assert.equal(/Overdue/.test(plan) && /Demand raised/.test(plan) === false && !/Raised \d{4}-\d\d-\d\d, due/.test(plan), false, 'an Overdue stage has a raised demand behind it');
+    await pill('Settlement').click(); await p.waitForTimeout(300);
+    await p.getByRole('button', { name: 'Allocate automatically' }).click(); await p.waitForTimeout(200);
+    const st = await p.getByTestId('ledger-settlement').innerText();
+    assert.match(st, /Money received/); assert.match(st, /Left to allocate/); assert.doesNotMatch(st, /Variance|Synchronize/i);
+    const left = Number((st.match(/Left to allocate\s*₹([\d,]+)/) || [])[1]?.replace(/,/g, ''));
+    assert.ok(left >= 0, 'automatic allocation never over-allocates');
+    await pill('Letters').click(); await p.waitForTimeout(300);
+    const lt = await p.getByTestId('ledger-letters').innerText();
+    assert.match(lt, /Interest Letter/); assert.match(lt, /Payment Reminder/); assert.doesNotMatch(lt, /Operational Guidelines/i);
+  });
+  test('Files: tidy tabs, a compact KYC checklist with clear actions', async () => {
+    await menu(p, MENU.booking); await tab(p, 'Confirmed'); await p.locator('[role=button][tabindex="0"]').first().click(); await p.waitForTimeout(500);
+    await tab(p, 'Files');
+    for (const n of ['Customer KYC', 'Unit documents', 'Project documents']) assert.ok(await p.getByRole('tab', { name: n, exact: true }).first().isVisible(), n);
+    const kyc = await p.getByTestId('kyc-documents').innerText();
+    assert.match(kyc, /\d of 6 verified/); assert.match(kyc, /PAN Card/); assert.match(kyc, /Aadhaar Card/);
+    assert.doesNotMatch(kyc, /Re-upload|KYC Completion/);
+    assert.match(kyc, /Preview|Upload/);
+    await p.getByRole('tab', { name: 'Unit documents', exact: true }).first().click(); await p.waitForTimeout(300);
+    const unit = await p.getByTestId('unit-documents').innerText();
+    assert.match(unit, /Booking Form/); assert.match(unit, /Registered Agreement/); assert.doesNotMatch(unit, /VIEW FILE|Transaction Sequence/);
+    assert.ok((await p.getByTestId('unit-documents').locator('li').count()) >= 10, 'one compact row per document');
+    await p.getByRole('tab', { name: 'Project documents', exact: true }).first().click(); await p.waitForTimeout(300);
+    const proj = await p.getByTestId('project-documents').innerText();
+    assert.match(proj, /RERA certificate/); assert.match(proj, /RERA number/); assert.match(proj, /Not added/, 'what the project does not have is not offered as a button');
+    assert.equal(await p.getByTestId('project-documents').getByRole('button', { name: /view/i }).count() <= 1, true, 'only documents that exist can be opened');
   });
   test('Visits / Booking / Agreement / Possession are all populated', async () => {
     await menu(p, MENU.visits);
@@ -479,7 +514,10 @@ describe('CRM: forms and popups (these change data)', () => {
   });
   test('Ledger: the payment popup validates', async () => {
     await menu(p, MENU.possession); await p.locator('[role=button][tabindex="0"]').nth(3).click(); await p.waitForTimeout(400);
-    await tab(p, 'Ledger'); await p.getByRole('button', { name: /record payment|add payment|receipt/i }).first().click(); await p.waitForTimeout(300);
+    await tab(p, 'Ledger');
+    const lg = await p.getByTestId('ledger-payments').innerText();
+    assert.match(lg, /Agreement value/); assert.match(lg, /Paid so far/); assert.match(lg, /Balance/); assert.match(lg, /Booking token/);
+    await p.getByRole('button', { name: /add receipt/i }).first().click(); await p.waitForTimeout(300);
     assert.equal(await dlg().getByRole('heading', { name: 'Record payment' }).isVisible(), true);
     await dlg().getByRole('button', { name: 'Add payment' }).click(); assert.ok((await dlg().locator('[role=alert]').count()) >= 1);
   });

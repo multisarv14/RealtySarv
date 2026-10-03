@@ -18,6 +18,8 @@ interface DocumentHubProps {
 
 type DocHubTab = 'Customer KYC' | 'Unit Documents' | 'Project Documents';
 
+const sentence = (s: string) => ({ 'View File': 'View', 'View Document': 'View', 'Upload Final Copy': 'Upload final copy', 'Pending Verify': 'Waiting for verification', 'Upload Challan': 'Upload challan', 'Mark Registered': 'Mark registered', 'ATS Lineup': 'ATS lineup' } as Record<string, string>)[s] || s;
+
 const DocumentRow: React.FC<{ 
     name: string; 
     icon: string; 
@@ -33,70 +35,49 @@ const DocumentRow: React.FC<{
     docStatus?: CustomerDocument['status'];
     fileName?: string;
     onViewClickOverride?: () => void;
+    /** Shown instead of a button when there is nothing to open (for example, a project paper that has not been added). */
+    emptyLabel?: string;
 }> = ({ 
     name, icon, description, onView, onUpload, onVerify, onReject, step, 
     actionLabel = "View File", isLocked = false, isPrimaryAction = false, 
     docStatus = 'Pending', fileName,
-    onViewClickOverride
-}) => (
-    <div 
-        onClick={() => !isLocked && (onViewClickOverride ? onViewClickOverride() : (docStatus === 'Verified' || !onUpload ? onView() : onUpload()))}
-        className={`bg-[var(--dark-bg)] p-3 rounded-lg border flex items-center gap-4 group transition-all mb-2 ${isLocked ? 'opacity-40 cursor-not-allowed border-[var(--light-bg)]' : 'border-[var(--light-bg)] hover:border-[var(--primary-color)] cursor-pointer shadow-sm'}`}
-    >
-        <div className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded bg-[var(--medium-bg)] text-[var(--text-secondary)] text-xs font-semibold border border-[var(--light-bg)] group-hover:bg-[var(--primary-color)] group-hover:text-white transition-colors">
-            {step}
-        </div>
-        <div className="w-10 h-10 flex-shrink-0 flex items-center justify-center rounded bg-[var(--medium-bg)] text-[var(--primary-color)] text-lg border border-[var(--light-bg)]">
-            <i className={icon}></i>
-        </div>
+    onViewClickOverride, emptyLabel
+}) => {
+    const btn = 'h-8 px-3 rounded-lg text-xs font-semibold border transition-colors whitespace-nowrap';
+    const ghost = `${btn} border-[var(--border-color)] text-[var(--text-primary)] hover:bg-[var(--light-bg)]`;
+    const label = sentence(actionLabel);
+    const open = () => (onViewClickOverride ? onViewClickOverride() : onView());
+    const chip = isLocked ? { t: 'Locked', c: 'bg-gray-500/10 text-[var(--text-secondary)] ring-gray-500/30' }
+        : docStatus === 'Verified' ? { t: 'Verified', c: 'bg-green-500/10 text-green-500 ring-green-500/30' }
+        : docStatus === 'Uploaded' ? { t: 'Uploaded', c: 'bg-blue-500/10 text-blue-500 ring-blue-500/30' }
+        : docStatus === 'Rejected' ? { t: 'Rejected', c: 'bg-red-500/10 text-red-500 ring-red-500/30' }
+        : emptyLabel ? { t: emptyLabel, c: 'bg-gray-500/10 text-[var(--text-secondary)] ring-gray-500/30' } : null;
+    return (
+    <li className={`flex items-center gap-3 px-4 py-2.5 transition-colors ${isLocked ? 'opacity-50' : 'hover:bg-[var(--dark-bg)]'}`}>
+        <span className="w-6 h-6 shrink-0 rounded-full bg-[var(--light-bg)] text-[var(--text-secondary)] text-[11px] font-bold flex items-center justify-center" aria-hidden="true">{step}</span>
+        <span className="w-8 h-8 shrink-0 flex items-center justify-center rounded-lg bg-[var(--medium-bg)] text-[var(--primary-color)] text-sm" aria-hidden="true"><i className={icon}></i></span>
         <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-                <h4 className="font-bold text-[var(--text-primary)] text-sm">{name}</h4>
-                {isLocked && <i className="fas fa-lock text-[10px] text-[var(--text-secondary)]"></i>}
-                {docStatus === 'Verified' && <i className="fas fa-check-circle text-green-500 text-xs"></i>}
-            </div>
-            <p className="text-[11px] text-[var(--text-secondary)] mt-0.5 line-clamp-1">{fileName || description}</p>
+            <h4 className="font-semibold text-[var(--text-primary)] text-sm truncate">{name}</h4>
+            <p className="text-xs text-[var(--text-secondary)] truncate">{fileName || description}</p>
         </div>
-        <div className="flex-shrink-0 flex gap-2">
-            {docStatus === 'Uploaded' && onVerify && (
+        {chip && <span className={`hidden sm:inline-block px-2 py-0.5 text-[11px] rounded-full font-semibold ring-1 ring-inset ${chip.c}`}>{chip.t}</span>}
+        <div className="shrink-0 flex gap-1.5">
+            {isLocked ? null : docStatus === 'Uploaded' && onVerify ? (
                 <>
-                    <button onClick={(e) => { e.stopPropagation(); onVerify(); }} className="px-3 py-1.5 rounded text-[10px] font-semibold uppercase bg-green-600/10 text-green-500 border border-green-500/20 hover:bg-green-600 hover:text-white transition-all">Verify</button>
-                    <button onClick={(e) => { e.stopPropagation(); onReject && onReject(); }} className="px-3 py-1.5 rounded text-[10px] font-semibold uppercase bg-red-600/10 text-red-500 border border-red-500/20 hover:bg-red-600 hover:text-white transition-all">Reject</button>
+                    <button onClick={onVerify} className={`${btn} bg-green-600 border-transparent text-white hover:bg-green-700`}>Verify</button>
+                    <button onClick={() => onReject && onReject()} className={`${btn} border-red-500/50 text-red-500 hover:bg-red-500/10`}>Reject</button>
                 </>
-            )}
-            
-            {docStatus === 'Verified' && (
-                <button onClick={(e) => { e.stopPropagation(); onViewClickOverride ? onViewClickOverride() : onView(); }} className="px-3 py-1.5 rounded text-[10px] font-semibold uppercase bg-gray-600/10 text-gray-400 border border-gray-500/20 hover:bg-gray-600 hover:text-white transition-all">View</button>
-            )}
-
-            {(docStatus === 'Pending' || docStatus === 'Rejected') && onUpload && (
-                 <button
-                    onClick={(e) => { e.stopPropagation(); onUpload(); }}
-                    disabled={isLocked}
-                    className={`px-3 py-1.5 rounded text-[10px] font-semibold uppercase border transition-all ${
-                        isLocked 
-                        ? 'bg-transparent text-[var(--text-secondary)] border-transparent' 
-                        : isPrimaryAction
-                            ? 'bg-blue-600/10 text-blue-500 border-blue-500/20 hover:bg-blue-600 hover:text-white'
-                            : 'bg-[var(--medium-bg)] text-[var(--text-secondary)] hover:bg-[var(--primary-color)] hover:text-white border border-[var(--light-bg)] group-hover:border-[var(--primary-color)]'
-                    }`}
-                >
-                    {actionLabel}
-                </button>
-            )}
-            
-            {!onUpload && (
-                <button
-                    onClick={(e) => { e.stopPropagation(); onViewClickOverride ? onViewClickOverride() : onView(); }}
-                    disabled={isLocked}
-                    className="px-3 py-1.5 rounded text-[10px] font-semibold uppercase bg-[var(--medium-bg)] text-[var(--text-secondary)] hover:bg-[var(--primary-color)] hover:text-white border border-[var(--light-bg)] group-hover:border-[var(--primary-color)]"
-                >
-                    {actionLabel}
-                </button>
-            )}
+            ) : docStatus === 'Verified' ? (
+                <button onClick={open} className={ghost}>{label}</button>
+            ) : (docStatus === 'Pending' || docStatus === 'Rejected') && onUpload ? (
+                <button onClick={onUpload} className={isPrimaryAction ? `${btn} bg-[var(--primary-color)] border-transparent text-white hover:brightness-110` : ghost}>{label}</button>
+            ) : !onUpload && !emptyLabel ? (
+                <button onClick={open} className={ghost}>{label}</button>
+            ) : null}
         </div>
-    </div>
-);
+    </li>
+    );
+};
 
 const CustomerDocumentsTab: React.FC<{ lead: Lead; onUpdate: DocumentHubProps['onUpdateApplicantDocument']; }> = ({ lead, onUpdate }) => {
     const fileInputRef = React.useRef<HTMLInputElement | null>(null);
@@ -180,74 +161,60 @@ const CustomerDocumentsTab: React.FC<{ lead: Lead; onUpdate: DocumentHubProps['o
     const progress = activeApplicant ? (verifiedCount / requiredDocs.length) * 100 : 0;
     
     return (
-        <div className="p-4 sm:p-6">
+        <div className="p-4 sm:p-6 max-w-4xl mx-auto" data-testid="kyc-documents">
             <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
-            
-            <div className="flex border-b border-[var(--light-bg)] mb-6">
-                {applicants.map((app, index) => (
-                    <button 
-                        key={app.id} 
-                        onClick={() => setActiveApplicantId(app.id)}
-                        className={`px-4 py-2 text-sm font-medium transition-colors ${app.id === activeApplicantId ? 'border-b-2 border-[var(--primary-color)] text-[var(--primary-color)]' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
-                    >
-                        {index === 0 ? 'Primary Applicant' : `Co-Applicant ${index}`}
-                    </button>
-                ))}
-            </div>
+
+            {applicants.length > 1 && (
+                <div role="tablist" aria-label="Applicants" className="flex gap-1.5 mb-4 overflow-x-auto no-scrollbar">
+                    {applicants.map((app, index) => (
+                        <button key={app.id} role="tab" aria-selected={app.id === activeApplicantId} onClick={() => setActiveApplicantId(app.id)}
+                            className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap border transition-colors ${app.id === activeApplicantId ? 'border-[var(--primary-color)] text-[var(--primary-color)] bg-[color-mix(in_srgb,var(--primary-color)_12%,transparent)]' : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}>
+                            {index === 0 ? 'Primary applicant' : `Co-applicant ${index}`}
+                        </button>
+                    ))}
+                </div>
+            )}
 
             {activeApplicant && (
-                <div className="animate-fadeIn">
-                    <div className="mb-6">
-                        <div className="flex justify-between items-center mb-2">
-                            <h4 className="font-semibold text-[var(--text-primary)]">KYC Completion for {activeApplicant.fullName}</h4>
-                            <span className="text-sm font-bold text-[var(--primary-color)]">{verifiedCount} / {requiredDocs.length} Verified</span>
+                <div className="animate-fadeIn space-y-3">
+                    <div className="bg-[var(--dark-bg)] rounded-xl border border-[var(--light-bg)] p-4">
+                        <div className="flex justify-between items-center mb-2 gap-3">
+                            <div className="min-w-0">
+                                <h4 className="font-semibold text-sm text-[var(--text-primary)] truncate">{activeApplicant.fullName}</h4>
+                                <p className="text-xs text-[var(--text-secondary)]">{applicants.indexOf(activeApplicant) === 0 ? 'Primary applicant' : `Co-applicant ${applicants.indexOf(activeApplicant)}`} · KYC documents</p>
+                            </div>
+                            <span className={`shrink-0 text-xs font-bold ${verifiedCount === requiredDocs.length ? 'text-green-500' : 'text-[var(--text-primary)]'}`}>{verifiedCount} of {requiredDocs.length} verified</span>
                         </div>
-                        <div className="w-full bg-[var(--dark-bg)] rounded-full h-2.5">
-                            <div className="bg-[var(--primary-color)] h-2.5 rounded-full transition-all duration-500" style={{ width: `${progress}%` }}></div>
+                        <div className="w-full bg-[var(--light-bg)] rounded-full h-1.5" role="progressbar" aria-valuenow={Math.round(progress)} aria-valuemin={0} aria-valuemax={100} aria-label="KYC verified">
+                            <div className={`${verifiedCount === requiredDocs.length ? 'bg-green-500' : 'bg-[var(--primary-color)]'} h-1.5 rounded-full transition-all duration-500`} style={{ width: `${progress}%` }}></div>
                         </div>
                     </div>
 
-                    <ul className="space-y-3">
+                    <ul className="border border-[var(--light-bg)] rounded-xl overflow-hidden divide-y divide-[var(--light-bg)]">
                         {requiredDocs.map(docType => {
-                            // FIX: Explicit cast of customerDocuments ensures doc is correctly inferred as CustomerDocument | undefined.
                             const doc = (activeApplicant.customerDocuments as Record<string, CustomerDocument>)[docType] || { status: 'Pending' };
                             const statusInfo = getStatusInfo(doc.status);
+                            const btn = 'h-8 px-3 text-xs rounded-lg font-semibold transition-colors inline-flex items-center gap-1.5';
                             return (
-                                <li key={docType} className="bg-[var(--dark-bg)] p-3 rounded-lg border border-[var(--light-bg)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                                    <div className="flex items-center gap-4 flex-1 min-w-0">
-                                        <i className={`${statusInfo.icon} ${statusInfo.iconColor} text-xl w-6 text-center`}></i>
+                                <li key={docType} className="px-4 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:bg-[var(--dark-bg)] transition-colors">
+                                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                                        <i className={`${statusInfo.icon} ${statusInfo.iconColor} text-base w-5 text-center`} aria-hidden="true"></i>
                                         <div className="flex-1 min-w-0">
-                                            <p className="font-semibold text-[var(--text-primary)] truncate">{docType}</p>
-                                            {doc.fileName ? (
-                                                <p className="text-xs text-[var(--text-primary)] mt-1 truncate opacity-90 font-medium" title={doc.fileName}>
-                                                    <i className="fas fa-paperclip mr-1"></i> {doc.fileName}
-                                                </p>
-                                            ) : (
-                                                <p className="text-xs text-[var(--text-secondary)] italic mt-1 opacity-80">No file uploaded</p>
-                                            )}
+                                            <p className="text-sm font-semibold text-[var(--text-primary)] truncate">{docType}</p>
+                                            <p className="text-xs text-[var(--text-secondary)] truncate" title={doc.fileName}>{doc.fileName ? <><i className="fas fa-paperclip mr-1" aria-hidden="true"></i>{doc.fileName}</> : 'No file yet'}</p>
                                         </div>
-                                        <span className={`px-2 py-0.5 text-[10px] rounded-full font-semibold ring-1 ring-inset ${statusInfo.chip} sm:hidden`}>
-                                            {doc.status}
-                                        </span>
+                                        <span className={`px-2 py-0.5 text-[11px] rounded-full font-semibold ring-1 ring-inset ${statusInfo.chip}`}>{doc.status}</span>
                                     </div>
-                                    <div className="flex items-center gap-2 flex-shrink-0 self-end sm:self-center">
-                                        <span className={`px-2 py-0.5 text-[10px] rounded-full font-semibold ring-1 ring-inset ${statusInfo.chip} hidden sm:inline-block`}>
-                                            {doc.status}
-                                        </span>
-                                        {doc.fileName && (
-                                            <button onClick={() => handlePreview(docType, doc)} className="px-2 py-1 text-[10px] rounded-md bg-gray-500/80 text-white font-semibold hover:bg-gray-600 transition-colors">
-                                                Preview
-                                            </button>
-                                        )}
+                                    <div className="flex items-center gap-1.5 flex-shrink-0 self-end sm:self-center">
+                                        {doc.fileName && <button onClick={() => handlePreview(docType, doc)} className={`${btn} border border-[var(--border-color)] text-[var(--text-primary)] hover:bg-[var(--light-bg)]`}><i className="far fa-eye" aria-hidden="true"></i>Preview</button>}
                                         {doc.status === 'Uploaded' && (
                                             <>
-                                                <button onClick={() => handleVerify(activeApplicant.id, docType)} className="px-2 py-1 text-[10px] rounded-md bg-green-600/80 text-white font-semibold hover:bg-green-700 transition-colors">Verify</button>
-                                                <button onClick={() => handleReject(activeApplicant.id, docType)} className="px-2 py-1 text-[10px] rounded-md bg-red-600/80 text-white font-semibold hover:bg-red-700 transition-colors">Reject</button>
+                                                <button onClick={() => handleVerify(activeApplicant.id, docType)} className={`${btn} bg-green-600 text-white hover:bg-green-700`}>Verify</button>
+                                                <button onClick={() => handleReject(activeApplicant.id, docType)} className={`${btn} border border-red-500/50 text-red-500 hover:bg-red-500/10`}>Reject</button>
                                             </>
                                         )}
-                                        <button onClick={() => handleUploadClick(activeApplicant.id, docType)} className="px-2 py-1 text-[10px] rounded-md bg-blue-600/80 text-white font-semibold hover:bg-blue-700 transition-colors">
-                                            <i className="fas fa-upload mr-1"></i>
-                                            {doc.status === 'Pending' || doc.status === 'Rejected' ? 'Upload' : 'Re-upload'}
+                                        <button onClick={() => handleUploadClick(activeApplicant.id, docType)} className={`${btn} ${doc.status === 'Pending' || doc.status === 'Rejected' ? 'bg-[var(--primary-color)] text-white hover:brightness-110' : 'border border-[var(--border-color)] text-[var(--text-secondary)] hover:bg-[var(--light-bg)] hover:text-[var(--text-primary)]'}`}>
+                                            <i className="fas fa-upload" aria-hidden="true"></i>{doc.status === 'Pending' || doc.status === 'Rejected' ? 'Upload' : 'Replace'}
                                         </button>
                                     </div>
                                 </li>
@@ -430,13 +397,13 @@ const UnitDocumentsTab: React.FC<{ lead: Lead; project: Project | null; onUpdate
     }
 
     return (
-        <div className="p-4 sm:p-6">
+        <div className="p-4 sm:p-6 max-w-4xl mx-auto">
             <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
-            <div className="flex justify-between items-center mb-4 px-1">
-                <h4 className="text-[10px] font-semibold uppercase text-[var(--text-secondary)] tracking-widest">Transaction Sequence</h4>
-                <span className="text-[10px] font-bold text-green-500 uppercase"><i className="fas fa-check-circle mr-1"></i> Booking Confirmed</span>
+            <div className="flex justify-between items-center mb-3">
+                <h4 className="text-sm font-semibold text-[var(--text-primary)]">Unit documents <span className="font-normal text-[var(--text-secondary)]">· in the order they happen</span></h4>
+                <span className="text-xs font-semibold text-green-500"><i className="fas fa-check-circle mr-1" aria-hidden="true"></i>Booking confirmed</span>
             </div>
-            <div className="flex flex-col">
+            <ul data-testid="unit-documents" className="border border-[var(--light-bg)] rounded-xl overflow-hidden divide-y divide-[var(--light-bg)]">
                 {documents.map((doc, idx) => {
                     const statusObj = unitDocs[doc.name];
                     const currentStatus = statusObj?.status || 'Pending';
@@ -463,7 +430,7 @@ const UnitDocumentsTab: React.FC<{ lead: Lead; project: Project | null; onUpdate
                         />
                     );
                 })}
-            </div>
+            </ul>
             <Modal isOpen={confirmAts} onClose={() => setConfirmAts(false)} size="sm" title="Move to ATS stage?" subtitle={lead.name}
                 footer={<><Button type="button" tone="ghost" onClick={() => setConfirmAts(false)}>Not yet</Button><Button type="button" onClick={() => { setConfirmAts(false); onUpdateLifecycle?.(lead.id, 'agreementStatus', 'ATS'); }}>Move to ATS</Button></>}>
                 <p className="text-sm text-[var(--text-secondary)]">The signed agreement has been verified. Move this booking to the ATS (Agreement to Sell) stage?</p>
@@ -482,42 +449,50 @@ const UnitDocumentsTab: React.FC<{ lead: Lead; project: Project | null; onUpdate
 };
 
 const ProjectDocumentsTab: React.FC<{ project: Project | null }> = ({ project }) => {
-    const documents = [
-        { name: 'Project Brochure', icon: 'fas fa-book-open', description: 'Marketing material with project details and images.' },
-        { name: 'RERA Certificate', icon: 'fas fa-certificate', description: 'Official RERA registration certificate for the project.' },
-        { name: 'Floor Plans', icon: 'fas fa-ruler-combined', description: 'Architectural drawings of the unit layouts.' },
-        { name: 'Legal Title Report', icon: 'fas fa-gavel', description: 'Report verifying the legal ownership of the land.' },
-        { name: 'Commencement Certificate', icon: 'fas fa-hard-hat', description: 'Approval from authorities to begin construction.' },
-    ];
+    const [preview, setPreview] = React.useState<{ docName: string; fileName: string; fileUrl: string } | null>(null);
 
     if (!project) {
         return (
              <div className="p-8 text-center text-[var(--text-secondary)] flex flex-col items-center justify-center h-full">
-                <i className="fas fa-folder-minus text-4xl mb-4"></i>
-                <h4 className="font-semibold text-[var(--text-primary)]">No Project Assigned</h4>
-                <p className="text-sm mt-1 max-w-xs">This lead is not yet assigned to a project. Project-level documents will appear here once assigned.</p>
+                <i className="fas fa-folder-minus text-4xl mb-4" aria-hidden="true"></i>
+                <h4 className="font-semibold text-[var(--text-primary)]">No project assigned</h4>
+                <p className="text-sm mt-1 max-w-xs">This lead is not yet assigned to a project. Project documents will appear here once assigned.</p>
             </div>
         )
     }
 
+    // Only what the project really has is openable; the rest says so instead of offering a button that does nothing.
+    const documents = [
+        { name: 'Project brochure', icon: 'fas fa-book-open', description: 'Marketing material with project details and images.' },
+        { name: 'RERA certificate', icon: 'fas fa-certificate', description: project.reraNumber ? `RERA number ${project.reraNumber}` : 'Official RERA registration certificate.' },
+        { name: 'Floor plans', icon: 'fas fa-ruler-combined', description: 'Architectural drawings of the unit layouts.', file: project.floorPlanUrl ? { fileName: `${project.name} floor plan`, fileUrl: project.floorPlanUrl } : undefined },
+        { name: 'Legal title report', icon: 'fas fa-gavel', description: 'Report verifying the legal ownership of the land.' },
+        { name: 'Commencement certificate', icon: 'fas fa-hard-hat', description: 'Approval from authorities to begin construction.' },
+    ];
+
     return (
-        <div className="p-4 sm:p-6">
-            <div className="flex justify-between items-center mb-4 px-1">
-                <h4 className="text-[10px] font-semibold uppercase text-[var(--text-secondary)] tracking-widest">Project Reference Material</h4>
-                <span className="text-[10px] font-bold text-[var(--primary-color)]">{project.name}</span>
+        <div className="p-4 sm:p-6 max-w-4xl mx-auto">
+            <div className="flex justify-between items-center mb-3">
+                <h4 className="text-sm font-semibold text-[var(--text-primary)]">Project documents</h4>
+                <span className="text-xs font-semibold text-[var(--primary-color)]">{project.name}</span>
             </div>
-            <div className="flex flex-col">
-                 {documents.map((doc, idx) => (
-                    <DocumentRow 
+            <ul data-testid="project-documents" className="border border-[var(--light-bg)] rounded-xl overflow-hidden divide-y divide-[var(--light-bg)]">
+                {documents.map((doc, idx) => (
+                    <DocumentRow
                         key={doc.name}
                         name={doc.name}
                         icon={doc.icon}
                         description={doc.description}
                         step={idx + 1}
-                        onView={() => toast.info(`A preview for “${doc.name}” isn't available yet.`)}
+                        docStatus={doc.file ? 'Verified' : 'Pending'}
+                        emptyLabel={doc.file ? undefined : 'Not added'}
+                        actionLabel="View File"
+                        onView={() => doc.file && setPreview({ docName: doc.name, ...doc.file })}
                     />
                 ))}
-            </div>
+            </ul>
+            <p className="mt-3 text-xs text-[var(--text-secondary)]">Project papers are added by an Admin under Projects. The floor plan comes from the project's Floor Plan tab.</p>
+            {preview && <DocumentPreviewModal isOpen={!!preview} onClose={() => setPreview(null)} docName={preview.docName} fileName={preview.fileName} fileUrl={preview.fileUrl} />}
         </div>
     );
 };
@@ -546,23 +521,14 @@ const DocumentHub: React.FC<DocumentHubProps> = ({ lead, project, onUpdateApplic
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-[var(--medium-bg)]">
-        <div className="border-b border-[var(--light-bg)] flex-shrink-0">
-            <nav className="flex flex-wrap -mb-px px-4">
-                {tabs.map(tab => (
-                    <button
-                        key={tab.key}
-                        onClick={() => setActiveTab?.(tab.key)}
-                        className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                            currentTab === tab.key
-                                ? 'border-[var(--primary-color)] text-[var(--primary-color)]'
-                                : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                        }`}
-                    >
-                        <i className={tab.icon}></i>
-                        <span>{tab.label}</span>
-                    </button>
-                ))}
-            </nav>
+        <div role="tablist" className="flex items-center gap-1.5 px-4 py-2.5 md:py-0 md:h-[52px] border-b border-[var(--light-bg)] flex-shrink-0 bg-[var(--dark-bg)] overflow-x-auto no-scrollbar">
+            {tabs.map(tab => (
+                <button key={tab.key} role="tab" aria-selected={currentTab === tab.key} onClick={() => setActiveTab?.(tab.key)}
+                    className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors ${currentTab === tab.key ? 'bg-[var(--primary-color)] text-white shadow-sm' : 'bg-[var(--medium-bg)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--light-bg)]'}`}>
+                    <i className={tab.icon} aria-hidden="true"></i>
+                    <span>{tab.label.replace('Documents', 'documents')}</span>
+                </button>
+            ))}
         </div>
         <div className="flex-1 overflow-y-auto">
             {renderContent()}
