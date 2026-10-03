@@ -18,7 +18,7 @@ export type LeadLifecycleStatus = LeadStatus | BookingStatus | AgreementStatus |
 export type FormModule = 'lead' | 'project' | 'booking' | 'user' | 'company' | 'vendor' | 'procurement' | 'contract' | 'site_ops' | 'inventory_master' | 'boq' | 'finance_ledger';
 export type FieldType = 'text' | 'number' | 'date' | 'select' | 'textarea';
 
-export interface Message { id: string; content: string; time: string; sender: 'sent' | 'received'; /** What kind of contact this was (a plain note when empty). */ kind?: 'note' | 'call' | 'whatsapp' | 'meeting'; outcome?: string; /** A recording of the call (a link, or a small audio file kept as a data URL). */ recordingUrl?: string; recordingName?: string; }
+export interface Message { id: string; content: string; time: string; sender: 'sent' | 'received'; /** What kind of contact this was (a plain note when empty). */ kind?: 'note' | 'call' | 'whatsapp' | 'meeting'; outcome?: string; /** WhatsApp sent through the system: where the message has got to. */ waStatus?: 'sent' | 'delivered' | 'read' | 'failed'; durationSec?: number; callLogId?: string; /** A recording of the call (a link, or a small audio file kept as a data URL). */ recordingUrl?: string; recordingName?: string; }
 export interface SiteVisit { id: string; leadId: string; date: string; time: string; propertyOfInterest: string; notes?: string; status: SiteVisitStatus; }
 export interface Task { id: string; leadId: string; title: string; description?: string; dueDate: string; priority: TaskPriority; status: TaskStatus; assignedTo: string; completedAt?: string; }
 export interface PropertyImage { id: string; url: string; }
@@ -145,6 +145,10 @@ export interface NewProjectData extends Omit<Project, 'id' | 'inventory' | 'park
 export interface NewTemplateData { name: string; type: TemplateType; content: string; }
 /** Decides who gets a new lead. The first enabled rule that matches wins. */
 export interface DistributionRule { id: string; name: string; enabled: boolean; mode: 'Round robin' | 'Least loaded'; projects: string[]; sources: string[]; assignees: string[]; cursor?: number; position?: number; }
+/** One call made from the system (click-to-call through the telephony provider). */
+export interface CallLog { id: string; leadId: string; userId: string; status: 'initiated' | 'ringing' | 'answered' | 'completed' | 'no-answer' | 'busy' | 'failed'; startedAt: string; answeredAt?: string; endedAt?: string; durationSec?: number; recordingUrl?: string; provider: string; providerCallId?: string; logged: boolean; error?: string }
+export interface WhatsAppTemplate { id: string; name: string; body: string; params: string[] }
+export interface IntegrationSettings { id: 'main'; webhookSecret: string; telephony: { enabled: boolean; provider: string }; whatsapp: { enabled: boolean; provider: string; enforceWindow?: boolean; simulatorAutoReply?: boolean } }
 export interface NewChannelPartnerData { firmName: string; contactPerson: string; email: string; phone: string; reraNumber: string; commissionRate: number; }
 export interface NewBudgetData { name: string; description?: string; }
 export interface NewClientProfileData { name: string; description?: string; }

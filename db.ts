@@ -3,7 +3,7 @@ import {
   LocationSetting, LivingPlace, LeadStatusType, SiteVisitStatusType, TaskPriorityType, 
   BookingStatusType, AgreementStatusType, PossessionStatusType, InventoryStatusType, 
   ProjectTypeType, ProjectStatusType, UserRoleSetting, UserDesignation, CompanyProfile, 
-  FinancialSettings, ApplicationSettings, ChannelPartner, DistributionRule, FormFieldConfig, Vendor, 
+  FinancialSettings, ApplicationSettings, ChannelPartner, DistributionRule, CallLog, WhatsAppTemplate, IntegrationSettings, FormFieldConfig, Vendor, 
   PurchaseOrder, WorkOrder, StockItem, DailyProgressReport, MaterialMaster, ServiceMaster,
   ProjectPhase, CostBudget, BOQ, BOQItem, PurchaseRequisition, ApprovalRule, AuditTrail,
   CostHeadMasterItem, LedgerAccount, Voucher, GstEntry
@@ -125,6 +125,9 @@ export class RealtySarvDB {
     userDesignations = new Table<UserDesignation>('userDesignations');
     channelPartners = new Table<ChannelPartner>('channelPartners');
     distributionRules = new Table<DistributionRule>('distributionRules');
+    callLogs = new Table<CallLog>('callLogs');
+    whatsappTemplates = new Table<WhatsAppTemplate>('whatsappTemplates');
+    integrationSettings = new Table<IntegrationSettings>('integrationSettings');
     companyProfile = new Table<CompanyProfile>('companyProfile', 'name');
     financialSettings = new Table<FinancialSettings>('financialSettings');
     applicationSettings = new Table<ApplicationSettings>('applicationSettings');

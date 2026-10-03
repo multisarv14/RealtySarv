@@ -285,3 +285,83 @@ describe('server-side access (not only hidden buttons)', () => {
   });
   test('clean up', async () => { await call('/leads/qa-acc1', { method: 'DELETE', host: H, token: admin }); });
 });
+
+describe('calling and WhatsApp from the system (built-in simulator)', () => {
+  let admin, sales, secret, leadId;
+  const put = (path, token, body) => call(path, { method: 'PUT', host: H, token, body });
+  const wait = async (fn, ms = 9000) => { const end = Date.now() + ms; for (;;) { const v = await fn(); if (v) return v; if (Date.now() > end) return v; await new Promise((r) => setTimeout(r, 300)); } };
+  const lead = (id) => ({ id, name: 'Qa Sim ' + id, avatarInitials: 'QS', lastMessage: 'x', time: '10:00', chatStatus: 'offline', leadStatus: 'New', read: true, messages: [], email: id + '@qa.test', phone: '+91 90000 88800', initialInterest: [], siteVisits: [], tasks: [], channelSource: 'Digital Marketing', leadSource: 'Website', preferredLocation: 'x', propertyImages: [], ownerId: 'user-2', leadProject: 'The Grand Towers', leadDate: '2026-10-01', bookingStatus: 'Pending', agreementStatus: 'Drafted', possessionStatus: 'Pending' });
+  before(async () => {
+    admin = await adminToken(); sales = await login(DEMO, 'aarav', 'sss');
+    secret = (await call('/integrationSettings', { host: H, token: admin })).body[0].webhookSecret;
+    leadId = 'qa-sim-1'; await put('/leads/' + leadId, admin, lead(leadId));
+  });
+
+  test('only an Admin can read the provider settings and webhook secret', async () => {
+    assert.equal((await call('/integrationSettings', { host: H, token: sales })).status, 403);
+    assert.equal((await call('/integrationSettings', { host: H, token: admin })).status, 200);
+    assert.equal((await call('/auth/workspace', { host: H })).body.integrations.telephony, true, 'the app is told only whether it is on');
+    assert.equal(JSON.stringify((await call('/auth/workspace', { host: H })).body).includes(secret), false);
+  });
+
+  test('a call from the system: events arrive, length and recording are kept, and the number never leaves the server', async () => {
+    const r = await call('/calls', { method: 'POST', host: H, token: sales, body: { leadId } });
+    assert.equal(r.status, 201); assert.equal(JSON.stringify(r.body).includes('90000'), false, 'no customer number in the response');
+    const done = await wait(async () => { const l = (await call('/callLogs/' + r.body.id, { host: H, token: sales })).body; return l.status === 'completed' ? l : null; });
+    assert.ok(done, 'the call completes'); assert.equal(done.durationSec, 134); assert.match(done.recordingUrl, /\/api\/simulator\/recording\/.+\.wav$/); assert.equal(done.logged, false);
+    const rec = await fetch(`http://127.0.0.1:4000${done.recordingUrl}`); assert.equal(rec.status, 200); assert.match(rec.headers.get('content-type'), /audio\/wav/);
+  });
+
+  test('calling is refused without a switched-on provider, an agent phone, or a customer number', async () => {
+    const cfg = (await call('/integrationSettings/main', { host: H, token: admin })).body;
+    await put('/integrationSettings/main', admin, { ...cfg, telephony: { ...cfg.telephony, enabled: false } });
+    assert.equal((await call('/calls', { method: 'POST', host: H, token: sales, body: { leadId } })).status, 400);
+    await put('/integrationSettings/main', admin, cfg);
+    const aarav = (await call('/users/user-2', { host: H, token: admin })).body;
+    await put('/users/user-2', admin, { ...aarav, phone: '' });
+    const noPhone = await call('/calls', { method: 'POST', host: H, token: sales, body: { leadId } });
+    await put('/users/user-2', admin, aarav);
+    assert.equal(noPhone.status, 400); assert.match(noPhone.body.message, /phone number/i);
+  });
+
+  test('vendor callbacks need the company secret', async () => {
+    assert.equal((await call(`/webhooks/${DEMO}/wrong/telephony`, { method: 'POST', body: { providerCallId: 'x', status: 'completed' } })).status, 401);
+    assert.equal((await call(`/webhooks/nobody-here-xyz/${secret}/telephony`, { method: 'POST', body: { providerCallId: 'x', status: 'completed' } })).status, 404);
+    const r = await call('/calls', { method: 'POST', host: H, token: sales, body: { leadId } });
+    const cl = await wait(async () => { const l = (await call('/callLogs/' + r.body.id, { host: H, token: sales })).body; return l.providerCallId ? l : null; });
+    const hook = await call(`/webhooks/${DEMO}/${secret}/telephony`, { method: 'POST', body: { providerCallId: cl.providerCallId, status: 'no-answer' } });
+    assert.equal(hook.status, 200);
+    assert.equal((await call('/callLogs/' + r.body.id, { host: H, token: sales })).body.status, 'no-answer');
+  });
+
+  test('WhatsApp: a template is needed until the customer writes; then free text; ticks and replies come back', async () => {
+    const closed = await call('/whatsapp/send', { method: 'POST', host: H, token: sales, body: { leadId, text: 'Hello' } });
+    assert.equal(closed.status, 409); assert.equal(closed.body.code, 'window-closed');
+    const tpl = await call('/whatsapp/send', { method: 'POST', host: H, token: sales, body: { leadId, templateId: 'wt-hello', params: ['Priya', 'Aarav', 'MultiSarv'] } });
+    assert.equal(tpl.status, 201); assert.match(tpl.body.content, /Hello Priya, this is Aarav from MultiSarv/); assert.equal(tpl.body.waStatus, 'sent');
+    const read = await wait(async () => { const l = (await call('/leads/' + leadId, { host: H, token: sales })).body; const m = l.messages.find((x) => x.id === tpl.body.id); return m?.waStatus === 'read' ? m : null; });
+    assert.ok(read, 'delivered and read ticks arrive');
+    assert.equal((await call('/whatsapp/window/' + leadId, { host: H, token: sales })).body.open, false);
+    assert.equal((await call('/simulator/whatsapp/incoming', { method: 'POST', host: H, token: sales, body: { leadId, text: 'x' } })).status, 403, 'only an Admin can fake a reply');
+    assert.equal((await call('/simulator/whatsapp/incoming', { method: 'POST', host: H, token: admin, body: { leadId, text: 'Please send the price sheet' } })).status, 202);
+    const l = (await call('/leads/' + leadId, { host: H, token: sales })).body;
+    const inbound = l.messages.find((m) => m.sender === 'received' && /price sheet/.test(m.content));
+    assert.ok(inbound && inbound.kind === 'whatsapp', 'the reply is in the chat'); assert.equal(l.read, false, 'and the lead shows as unread');
+    const w = (await call('/whatsapp/window/' + leadId, { host: H, token: sales })).body; assert.equal(w.open, true);
+    assert.equal((await call('/whatsapp/send', { method: 'POST', host: H, token: sales, body: { leadId, text: 'Sure, sending it now' } })).status, 201, 'free text is allowed in the window');
+  });
+
+  test('an incoming message from the provider lands on the lead with that number, and a stale page cannot erase it', async () => {
+    const hook = await call(`/webhooks/${DEMO}/${secret}/whatsapp`, { method: 'POST', body: { type: 'inbound', from: '919000088800', text: 'Is the 3BHK still available?', waId: 'wamid.test.1' } });
+    assert.equal(hook.status, 200);
+    const fresh = (await call('/leads/' + leadId, { host: H, token: sales })).body;
+    assert.ok(fresh.messages.some((m) => m.waId === 'wamid.test.1'));
+    // A page that opened before that message arrived saves the lead: the message must survive.
+    const stale = { ...fresh, messages: fresh.messages.filter((m) => m.waId !== 'wamid.test.1'), leadStatus: 'Contacted' };
+    assert.equal((await put('/leads/' + leadId, sales, stale)).status, 200);
+    const after = (await call('/leads/' + leadId, { host: H, token: sales })).body;
+    assert.ok(after.messages.some((m) => m.waId === 'wamid.test.1'), 'kept'); assert.equal(after.leadStatus, 'Contacted', 'and the page\'s own change still saved');
+  });
+
+  test('clean up', async () => { await call('/leads/' + leadId, { method: 'DELETE', host: H, token: admin }); });
+});

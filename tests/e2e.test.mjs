@@ -606,6 +606,12 @@ describe('CRM: forms and popups (these change data)', () => {
     assert.match(await p.getByTestId('call-recording').last().innerText(), /Open/);
   });
   test('Log update: WhatsApp keeps the customer reply on the customer side, and the header button prepares it', async () => {
+    // Without a WhatsApp provider switched on, the person logs it by hand (that is the path under test).
+    const Hh = hostFor(DEMO); const tk = await adminToken();
+    const cfg = (await call('/integrationSettings/main', { host: Hh, token: tk })).body;
+    await call('/integrationSettings/main', { method: 'PUT', host: Hh, token: tk, body: { ...cfg, whatsapp: { ...cfg.whatsapp, enabled: false } } });
+    await p.reload(); await p.waitForTimeout(3500);
+    try {
     const before = (await apiLeads()).filter((l) => l.bookingStatus !== 'Booked' && !l.tokenAmount && l.leadStatus === 'New' && !/Test|Qa/.test(l.name))[1];
     await menu(p, MENU.leads); await tab(p, 'Active');
     await p.getByLabel('Search leads').fill(before.name); await p.waitForTimeout(400);
@@ -623,6 +629,65 @@ describe('CRM: forms and popups (these change data)', () => {
     assert.equal(msg.kind, 'whatsapp'); assert.equal(msg.sender, 'received'); assert.match(msg.content, /price sheet/);
     const bubble = p.locator('[data-testid=message-bubble]').last();
     assert.match(await bubble.innerText(), /WhatsApp/); assert.match(await bubble.getAttribute('class'), /self-start/, 'on the customer side');
+      } finally {
+      await call('/integrationSettings/main', { method: 'PUT', host: Hh, token: tk, body: cfg });
+      await p.reload(); await p.waitForTimeout(3500);
+    }
+  });
+  test('Call from the system: the bar follows the call, and the write-up opens by itself with the length and recording', async () => {
+    const lead = (await apiLeads()).filter((l) => l.bookingStatus !== 'Booked' && !l.tokenAmount && l.leadStatus === 'New' && l.phone && !(l.siteVisits || []).some((v) => v.status === 'Completed') && !/Test|Qa/.test(l.name))[2];
+    await menu(p, MENU.leads); await tab(p, 'Active');
+    await p.getByLabel('Search leads').fill(lead.name); await p.waitForTimeout(400);
+    await p.locator('[role=button][tabindex="0"]').first().click(); await p.waitForTimeout(500);
+    await p.getByTitle('Call from the system').click();
+    await p.getByTestId('call-bar').waitFor({ timeout: 6000 });
+    assert.match(await p.getByTestId('call-bar').innerText(), /Calling|On a call/);
+    const box = p.getByTestId('log-update');
+    await box.locator('#log-status').waitFor({ timeout: 15000 });   // opens by itself when the call ends
+    assert.equal(await box.getByRole('button', { name: 'Call', exact: true }).getAttribute('aria-pressed'), 'true', 'already a call update');
+    assert.match(await box.getByTestId('call-captured').innerText(), /2m 14s.*recording attached/);
+    assert.equal(await box.getByLabel('Recording link').count(), 0, 'no manual recording field: it is attached already');
+    await box.getByLabel('Add a note').fill('Discussed the 3BHK and the payment plan');
+    await box.getByRole('radio', { name: 'Spoke' }).click();
+    await box.getByRole('radio', { name: 'Tomorrow' }).click();
+    await box.getByRole('button', { name: 'Save update' }).click(); await p.waitForTimeout(1500);
+    const after = (await apiLeads()).find((l) => l.id === lead.id);
+    const m = after.messages[after.messages.length - 1];
+    assert.equal(m.kind, 'call'); assert.equal(m.durationSec, 134); assert.ok(m.recordingUrl && m.callLogId, 'length and recording came from the provider');
+    const logs = (await call('/callLogs', { host: hostFor(DEMO), token: await adminToken() })).body;
+    assert.equal(logs.find((c) => c.id === m.callLogId).logged, true, 'the call is marked as written up');
+    assert.equal(await p.getByTestId('call-bar').count(), 0, 'the bar goes away');
+    assert.match(await p.getByTestId('call-recording').last().innerText(), /Call recording/);
+  });
+  test('WhatsApp from the system: a template first, ticks that turn blue, and the customer reply appears by itself', async () => {
+    const lead = (await apiLeads()).filter((l) => l.bookingStatus !== 'Booked' && !l.tokenAmount && l.leadStatus === 'New' && l.phone && !(l.siteVisits || []).some((v) => v.status === 'Completed') && !/Test|Qa/.test(l.name))[3];
+    await menu(p, MENU.leads); await tab(p, 'Active');
+    await p.getByLabel('Search leads').fill(lead.name); await p.waitForTimeout(400);
+    await p.locator('[role=button][tabindex="0"]').first().click(); await p.waitForTimeout(500);
+    await p.getByTitle('WhatsApp from the system').click(); await p.waitForTimeout(600);
+    const box = p.getByTestId('log-update');
+    assert.match(await box.getByTestId('whatsapp-window').innerText(), /only allows an approved template/);
+    await box.getByLabel('Add a note').fill('Hello there');
+    await box.getByRole('button', { name: 'Send WhatsApp and save' }).click(); await p.waitForTimeout(300);
+    assert.match(await box.innerText(), /Pick one|approved template/, 'a normal message is refused while the window is closed');
+    await box.locator('#wa-template').selectOption({ label: 'Introduction' }); await p.waitForTimeout(200);
+    const preview = await box.getByTestId('wa-preview').innerText();
+    assert.ok(preview.includes('Hello ' + lead.name.split(' ')[0]) && preview.includes('Sandeep Shah') && preview.includes('MultiSarv'), 'the blanks are filled in from what the app knows: ' + preview);
+    await box.getByRole('radio', { name: 'Tomorrow' }).click();
+    await box.getByRole('button', { name: 'Send WhatsApp and save' }).click(); await p.waitForTimeout(800);
+    const sent = p.locator('[data-testid=message-bubble]').last();
+    assert.match(await sent.innerText(), /WhatsApp/); assert.match(await sent.innerText(), /Hello .*this is Sandeep Shah/);
+    await p.waitForFunction(() => document.querySelector('[data-testid=message-bubble]:last-of-type [data-wa-status]')?.getAttribute('data-wa-status') === 'read', null, { timeout: 8000 });
+    const after = (await apiLeads()).find((l) => l.id === lead.id);
+    assert.equal(after.messages.filter((m) => m.kind === 'whatsapp' && m.sender === 'sent').length, 1, 'saved once, not twice');
+    assert.ok((after.tasks || []).some((t) => t.status === 'Pending' && t.title.startsWith('Follow-up:') && t.dueDate > new Date().toISOString().split('T')[0]), 'the next follow-up was booked in the same step');
+    // The customer answers (as if from their phone): it shows up in the open chat without a refresh.
+    await call('/simulator/whatsapp/incoming', { method: 'POST', host: hostFor(DEMO), token: await adminToken(), body: { leadId: lead.id, text: 'Please send the floor plan too' } });
+    await p.getByText('Please send the floor plan too').waitFor({ timeout: 6000 });
+    const reply = p.locator('[data-testid=message-bubble]').last();
+    assert.match(await reply.getAttribute('class'), /self-start/, 'on the customer side');
+    await box.getByRole('button', { name: 'WhatsApp', exact: true }).click(); await p.waitForTimeout(800);
+    assert.match(await box.getByTestId('whatsapp-window').innerText(), /can send a normal message/);
   });
   test('a stale page cannot bring old leads back (only changed leads are saved)', async () => {
     const t = await adminToken(); const h = hostFor(DEMO);
@@ -807,6 +872,17 @@ describe('Admin: honest screens and in-app dialogs', () => {
     await p.getByRole('dialog').getByRole('button', { name: 'Save changes' }).click(); await p.waitForTimeout(250);
     assert.match(await p.getByRole('dialog').innerText(), /already registered/);
     await p.keyboard.press('Escape'); await p.waitForTimeout(250);
+  });
+  test('Integrations > Calls & chat: switch calling and WhatsApp on and copy the provider addresses', async () => {
+    if (!(await p.getByRole('button', { name: 'Calls & chat', exact: true }).first().isVisible())) await section('Integrations');
+    await p.getByRole('button', { name: 'Calls & chat', exact: true }).first().click(); await p.waitForTimeout(500);
+    const panel = await p.getByTestId('live-connections').innerText();
+    assert.match(panel, /Calling from the system/); assert.match(panel, /WhatsApp from the system/); assert.match(panel, /Addresses your provider has to call/);
+    assert.match(await p.getByLabel('Calls', { exact: true }).inputValue(), /\/api\/webhooks\/multisarv\/[0-9a-f]{32}\/telephony$/);
+    assert.match(await p.getByLabel('WhatsApp', { exact: true }).inputValue(), /\/whatsapp$/);
+    assert.equal(await p.getByRole('switch', { name: 'Calling from the system' }).getAttribute('aria-checked'), 'true');
+    assert.match(await p.getByTestId('simulate-reply').innerText(), /pretend a customer wrote/);
+    assert.doesNotMatch(await p.locator('body').innerText(), /Click-to-Call|Call Recordings/, 'the old switches that did nothing are gone');
   });
   test('no browser alert/confirm appeared during any of this', () => { assert.deepEqual(dialogs, []); });
 });

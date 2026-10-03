@@ -8,7 +8,7 @@ interface MessageBubbleProps {
 // Colours come from the app's theme variables (index.css), so bubbles follow the in-app
 // dark/light switch instead of the operating system's colour scheme.
 const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
-  const { content, time, sender, kind, outcome, recordingUrl, recordingName } = message;
+  const { content, time, sender, kind, outcome, recordingUrl, recordingName, waStatus, durationSec } = message;
   const KIND: Record<string, { icon: string; label: string }> = { call: { icon: 'fa-phone-alt', label: 'Call' }, whatsapp: { icon: 'fa-whatsapp fab', label: 'WhatsApp' }, meeting: { icon: 'fa-handshake', label: 'Meeting' } };
   const k = kind ? KIND[kind] : undefined;
   const isSent = sender === 'sent';
@@ -24,7 +24,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
     >
       {(k || outcome) && (
         <div className="flex items-center gap-1.5 mb-1 text-[10px] font-semibold text-[var(--text-secondary)]">
-          {k && <span><i className={`${k.icon.includes('fab') ? '' : 'fas '}${k.icon} mr-1`} aria-hidden="true"></i>{k.label}</span>}
+          {k && <span><i className={`${k.icon.includes('fab') ? '' : 'fas '}${k.icon} mr-1`} aria-hidden="true"></i>{k.label}{durationSec ? ` · ${Math.floor(durationSec / 60)}m ${durationSec % 60}s` : ''}</span>}
           {outcome && <span className="px-1.5 py-px rounded-full bg-black/20 text-[var(--text-primary)]">{outcome}</span>}
         </div>
       )}
@@ -37,7 +37,9 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
       )}
       <div className="text-[10px] mt-1 self-end font-medium text-[var(--text-secondary)]">
           {time}
-          {isSent && <i className="fas fa-check-double ml-1 text-sky-400" aria-hidden="true"></i>}
+          {isSent && (waStatus === 'failed'
+            ? <i className="fas fa-exclamation-circle ml-1 text-red-400" title="Not delivered" aria-label="Not delivered"></i>
+            : <i className={`fas ${waStatus === 'sent' ? 'fa-check' : 'fa-check-double'} ml-1 ${waStatus === 'delivered' || waStatus === 'sent' ? 'text-gray-400' : 'text-sky-400'}`} title={waStatus ? `WhatsApp: ${waStatus}` : undefined} aria-label={waStatus ? `WhatsApp ${waStatus}` : undefined} data-wa-status={waStatus}></i>)}
       </div>
     </div>
   );

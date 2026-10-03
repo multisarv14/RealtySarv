@@ -50,7 +50,9 @@ router.get('/workspace', async (req: Request, res: Response) => {
   const t = req as TenantRequest;
   const p: any = await t.models!.companyProfile.findOne().lean();
   const spec = PLAN_SPECS[t.tenant!.plan ?? ''];
+  const cfg: any = await t.models!.integrationSettings.findById('main').lean();
   res.json({
+    integrations: { telephony: !!cfg?.telephony?.enabled, whatsapp: !!cfg?.whatsapp?.enabled },
     name: p?.name ?? t.tenant!.companyName, subdomain: t.tenant!._id, setupCompleted: !!p?.setupCompleted, allowSignup: signupAllowed(),
     plan: t.tenant!.plan ?? null, modules: t.tenant!.modules ?? { crm: true, erp: true }, maxUsers: spec ? spec.maxUsers : null,
   });

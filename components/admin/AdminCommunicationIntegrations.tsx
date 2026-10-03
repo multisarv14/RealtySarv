@@ -1,6 +1,8 @@
 
 import React from 'react';
 import { toast } from '../ui/Toast';
+import { Lead } from '../../types';
+import AdminLiveConnections from './AdminLiveConnections';
 
 interface ProviderItem {
     id: string;
@@ -75,7 +77,7 @@ const FeatureToggle: React.FC<{ label: string; description: string }> = ({ label
     </div>
 );
 
-const AdminCommunicationIntegrations: React.FC = () => {
+const AdminCommunicationIntegrations: React.FC<{ leads?: Lead[] }> = ({ leads = [] }) => {
     return (
         <div className="p-4 bg-[var(--medium-bg)] rounded-lg shadow-md h-full overflow-hidden flex flex-col">
             <div className="flex-shrink-0 mb-6">
@@ -85,20 +87,8 @@ const AdminCommunicationIntegrations: React.FC = () => {
 
             <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-8">
                 
-                {/* Global Settings */}
-                <div className="p-4 bg-[var(--medium-bg)]/50 border border-[var(--light-bg)] rounded-lg">
-                    <h4 className="text-sm font-bold text-[var(--text-primary)] mb-4 flex items-center gap-2">
-                        <i className="fas fa-sliders-h text-[var(--primary-color)]"></i> Communication Features
-                    </h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        <FeatureToggle label="Click-to-Call" description="Enable one-click calling from CRM." />
-                        <FeatureToggle label="Call Recordings" description="Auto-save call logs to lead timeline." />
-                        <FeatureToggle label="Incoming Call Pop-up" description="Show lead details on incoming calls." />
-                        <FeatureToggle label="Missed Call Auto-Lead" description="Create leads from missed calls." />
-                        <FeatureToggle label="IVR Routing" description="Route calls based on project/team." />
-                        <FeatureToggle label="Agent Logs" description="Track agent call performance metrics." />
-                    </div>
-                </div>
+                <AdminLiveConnections leads={leads} />
+
 
                 {/* Telephony */}
                 <div>

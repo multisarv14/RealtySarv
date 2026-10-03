@@ -44,10 +44,26 @@ export async function http<T = any>(method: string, path: string, body?: unknown
 export const authApi = {
   login: (identity: string, password: string) => http('POST', '/auth/login', { identity, password }, { auth: false }),
   register: (body: { name?: string; email: string; password: string; phone?: string }) => http('POST', '/auth/register', body, { auth: false }),
-  workspace: () => http<{ name: string; subdomain: string; setupCompleted: boolean; allowSignup?: boolean; plan?: string | null; modules?: { crm?: boolean; erp?: boolean }; maxUsers?: number | null }>('GET', '/auth/workspace', undefined, { auth: false }),
+  workspace: () => http<{ integrations?: { telephony: boolean; whatsapp: boolean }; name: string; subdomain: string; setupCompleted: boolean; allowSignup?: boolean; plan?: string | null; modules?: { crm?: boolean; erp?: boolean }; maxUsers?: number | null }>('GET', '/auth/workspace', undefined, { auth: false }),
   me: () => http('GET', '/auth/me'),
   exchange: (token: string) => http<{ token: string; user: any }>('POST', '/auth/exchange', { token }, { auth: false }),
 };
+
+// Calling and WhatsApp through the company's providers. The customer's number stays on the server.
+export const integrationsApi = {
+  startCall: (leadId: string) => http<import('./types').CallLog>('POST', '/calls', { leadId }),
+  sendWhatsApp: (body: { leadId: string; text?: string; templateId?: string; params?: string[] }) => http<import('./types').Message>('POST', '/whatsapp/send', body),
+  whatsappWindow: (leadId: string) => http<{ enabled: boolean; enforced?: boolean; open: boolean; until: string | null }>('GET', `/whatsapp/window/${encodeURIComponent(leadId)}`),
+  simulateReply: (leadId: string, text: string) => http('POST', '/simulator/whatsapp/incoming', { leadId, text }),
+};
+
+/** Live updates from the server (a call changed state, a WhatsApp message arrived). Returns a function that closes it. */
+export function openEvents(onEvent: (e: { type: 'call' | 'lead'; [k: string]: unknown }) => void): () => void {
+  const ws = workspaceViaHeader();
+  const es = new EventSource(`${BASE}/events?token=${encodeURIComponent(getToken())}${ws ? `&workspace=${encodeURIComponent(ws)}` : ''}`);
+  es.onmessage = (m) => { try { onEvent(JSON.parse(m.data)); } catch { /* ignore a malformed event */ } };
+  return () => es.close();
+}
 
 // Main-site endpoints (no company yet).
 export const tenantApi = {

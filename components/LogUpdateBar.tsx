@@ -1,5 +1,6 @@
 import React from 'react';
-import { Lead, LeadStatus, Task } from '../types';
+import { CallLog, Lead, LeadStatus, Task, WhatsAppTemplate } from '../types';
+import { integrationsApi } from '../httpClient';
 import { Chips, inputCls } from './ui/Modal';
 import { friendlyDate, openWhatsApp, time12, todayISO } from './leadUi';
 
@@ -12,6 +13,10 @@ export interface LogUpdatePayload {
   /** WhatsApp only: did we write, or did the customer reply? */
   direction?: 'sent' | 'received';
   recordingUrl?: string; recordingName?: string;
+  /** The call from the system that this update is about: its length and recording are filled in by the server. */
+  callLogId?: string; durationSec?: number;
+  /** The message was already sent through the WhatsApp API (the server stored it); only the status and follow-up are saved here. */
+  skipMessage?: boolean;
   /** Unqualified: nothing more to chase, so every other open follow-up is closed too. */
   closeOpenFollowUps?: boolean;
 }
@@ -22,6 +27,16 @@ interface LogUpdateBarProps {
   focusTaskId?: string | null;
   /** The header's Call / WhatsApp buttons ask for that type to be ready (n changes on every press). */
   preset?: { kind: LogKind; n: number } | null;
+  /** The latest finished call from the system that has not been written up yet. */
+  callLog?: CallLog | null;
+  /** Calling / WhatsApp go through the company's providers when these are on. */
+  integrations?: { telephony: boolean; whatsapp: boolean };
+  templates?: WhatsAppTemplate[];
+  /** For filling template blanks: your name and the company's. */
+  userName?: string;
+  companyName?: string;
+  /** Sends through the WhatsApp API; resolves when the server has stored the message. */
+  onSendWhatsApp?: (body: { text?: string; templateId?: string; params?: string[] }) => Promise<void>;
   onClearFocus: () => void;
   onSave: (payload: LogUpdatePayload) => void;
 }
@@ -41,7 +56,7 @@ const followUpTime = (t: Task) => (t.description || '').match(/Scheduled for (\d
 /** The bar at the bottom of Activity: what happened, the status now, and what comes next, saved in one go. */
 const MAX_AUDIO = 2 * 1024 * 1024;
 
-const LogUpdateBar: React.FC<LogUpdateBarProps> = ({ lead, focusTaskId, preset, onClearFocus, onSave }) => {
+const LogUpdateBar: React.FC<LogUpdateBarProps> = ({ lead, focusTaskId, preset, callLog, integrations, templates = [], userName, companyName, onSendWhatsApp, onClearFocus, onSave }) => {
   const pending = React.useMemo(() => (lead.tasks || []).filter(t => t.status === 'Pending' && t.title.startsWith('Follow-up:'))
     .sort((a, b) => (a.dueDate + (followUpTime(a) || '')).localeCompare(b.dueDate + (followUpTime(b) || ''))), [lead.tasks]);
   const target = pending.find(t => t.id === focusTaskId) || pending[0];
@@ -55,6 +70,11 @@ const LogUpdateBar: React.FC<LogUpdateBarProps> = ({ lead, focusTaskId, preset, 
   const [nextTime, setNextTime] = React.useState('11:00');
   const [nextType, setNextType] = React.useState<'Call' | 'Meeting' | 'Email'>('Call');
   const [direction, setDirection] = React.useState<'sent' | 'received'>('sent');
+  const [sending, setSending] = React.useState(false);
+  const [sendError, setSendError] = React.useState('');
+  const [win, setWin] = React.useState<{ enabled: boolean; enforced?: boolean; open: boolean; until: string | null } | null>(null);
+  const [tplId, setTplId] = React.useState('');
+  const [tplParams, setTplParams] = React.useState<string[]>([]);
   const [recUrl, setRecUrl] = React.useState('');
   const [recName, setRecName] = React.useState('');
   const [recError, setRecError] = React.useState('');
@@ -65,7 +85,7 @@ const LogUpdateBar: React.FC<LogUpdateBarProps> = ({ lead, focusTaskId, preset, 
 
   // A different lead, or Done pressed on a follow-up: start fresh (and open, so the next steps are in view).
   React.useEffect(() => {
-    setKind('note'); setText(''); setOutcome(''); setStatus(lead.leadStatus); setDone(true); setNextDate(''); setNextTime('11:00'); setShowErrors(false); setOpen(false); setDirection('sent'); setRecUrl(''); setRecName(''); setRecError('');
+    setKind('note'); setText(''); setOutcome(''); setStatus(lead.leadStatus); setDone(true); setNextDate(''); setNextTime('11:00'); setShowErrors(false); setOpen(false); setDirection('sent'); setRecUrl(''); setRecName(''); setRecError(''); setTplId(''); setTplParams([]); setSendError(''); setWin(null);
   }, [lead.id]);
   React.useEffect(() => {
     if (!preset) return;
@@ -79,12 +99,26 @@ const LogUpdateBar: React.FC<LogUpdateBarProps> = ({ lead, focusTaskId, preset, 
     window.setTimeout(() => inputRef.current?.focus(), 50);
   }, [focusTaskId]);
 
+  const sendMode = kind === 'whatsapp' && !!integrations?.whatsapp;
+  React.useEffect(() => {
+    if (!sendMode) return;
+    let alive = true;
+    integrationsApi.whatsappWindow(lead.id).then(w => { if (alive) setWin(w); }).catch(() => { if (alive) setWin(null); });
+    return () => { alive = false; };
+  }, [sendMode, lead.id, lead.messages?.length]);
+  const tpl = templates.find(t => t.id === tplId);
+  const mustUseTemplate = sendMode && !!win?.enforced && !win.open;
+  // Fill the blanks from what we know: the customer's first name, your name, the company, the project.
+  const guess = (label: string) => /customer|name$/i.test(label) && /customer/i.test(label) ? lead.name.split(' ')[0] : /your/i.test(label) ? (userName || '') : /company/i.test(label) ? (companyName || '') : /project/i.test(label) ? (lead.leadProject !== 'Not Assigned' ? lead.leadProject : '') : '';
+  const pickTemplate = (id: string) => { setTplId(id); const t = templates.find(x => x.id === id); setTplParams((t?.params || []).map(guess)); };
+  const renderedTemplate = tpl ? tpl.body.replace(/\{\{(\d+)\}\}/g, (_m, n) => tplParams[Number(n) - 1] || `{{${n}}}`) : '';
   const booked = lead.bookingStatus === 'Booked';
   const unqualified = status === 'Unqualified';
   const nextRequired = !booked && status !== 'Converted' && !unqualified;
-  const wroteSomething = !!text.trim() || !!outcome;
+  const wroteSomething = !!text.trim() || !!outcome || (sendMode && !!tpl);
   const errors = {
-    text: wroteSomething ? '' : 'Write what happened, or pick an outcome.',
+    text: wroteSomething ? '' : sendMode ? 'Write the message, or pick a template.' : 'Write what happened, or pick an outcome.',
+    template: mustUseTemplate && !tpl ? 'WhatsApp only allows an approved template now. Pick one.' : mustUseTemplate && tplParams.some(p => !p.trim()) ? 'Fill in every blank of the template.' : '',
     next: nextRequired && !(nextDate && nextTime) ? 'Pick the date and time of the next follow-up.' : '',
     recording: recUrl && !/^(https?:\/\/|data:audio\/)/i.test(recUrl) ? 'The recording link must start with http:// or https://' : '',
   };
@@ -97,16 +131,26 @@ const LogUpdateBar: React.FC<LogUpdateBarProps> = ({ lead, focusTaskId, preset, 
     r.readAsDataURL(file);
   };
 
-  const save = () => {
-    if (errors.text || errors.next || errors.recording) { setShowErrors(true); setOpen(true); return; }
+  const save = async () => {
+    if (errors.text || errors.next || errors.recording || errors.template) { setShowErrors(true); setOpen(true); return; }
+    if (sendMode && onSendWhatsApp) {
+      setSending(true); setSendError('');
+      try { await onSendWhatsApp(mustUseTemplate || tpl ? { templateId: tplId, params: tplParams } : { text: text.trim() }); }
+      catch (e: any) { setSendError(e?.message || 'The message could not be sent.'); setSending(false); setOpen(true); return; }
+      setSending(false);
+    }
+    const viaCall = kind === 'call' && !!callLog;
     onSave({
-      kind, text: text.trim(), outcome: outcome || undefined, status, completeTaskId: done && target ? target.id : undefined,
+      kind, text: sendMode ? '' : text.trim(), outcome: outcome || undefined, status, completeTaskId: done && target ? target.id : undefined,
       next: !unqualified && nextDate && nextTime ? { type: nextType, date: nextDate, time: nextTime } : undefined,
-      direction: kind === 'whatsapp' ? direction : undefined,
-      recordingUrl: kind === 'call' && recUrl ? recUrl : undefined, recordingName: kind === 'call' && recUrl ? (recName || 'Call recording') : undefined,
+      direction: kind === 'whatsapp' && !sendMode ? direction : undefined,
+      recordingUrl: viaCall ? callLog!.recordingUrl : kind === 'call' && recUrl ? recUrl : undefined,
+      recordingName: viaCall ? (callLog!.recordingUrl ? 'Call recording' : undefined) : kind === 'call' && recUrl ? (recName || 'Call recording') : undefined,
+      callLogId: viaCall ? callLog!.id : undefined, durationSec: viaCall ? callLog!.durationSec : undefined,
+      skipMessage: sendMode || undefined,
       closeOpenFollowUps: unqualified,
     });
-    setText(''); setOutcome(''); setNextDate(''); setShowErrors(false); setOpen(false); setKind('note'); setRecUrl(''); setRecName(''); setRecError(''); setDirection('sent'); onClearFocus();
+    setText(''); setOutcome(''); setNextDate(''); setShowErrors(false); setOpen(false); setKind('note'); setRecUrl(''); setRecName(''); setRecError(''); setDirection('sent'); setTplId(''); setTplParams([]); onClearFocus();
   };
   const pickQuick = (label: string) => { setNextDate(addDays(QUICK.find(q => q[0] === label)![1])); };
   const quickValue = QUICK.find(([, n]) => addDays(n) === nextDate)?.[0] || '';
@@ -121,7 +165,32 @@ const LogUpdateBar: React.FC<LogUpdateBarProps> = ({ lead, focusTaskId, preset, 
               <Chips label="Outcome" options={OUTCOMES} value={outcome} onChange={(v: string) => setOutcome(outcome === v ? '' : v)} />
             </div>
           )}
-          {kind === 'whatsapp' && (
+          {kind === 'whatsapp' && sendMode && (
+            <div data-testid="whatsapp-window" className="space-y-2">
+              <p className={`text-xs ${win?.open ? 'text-green-500' : 'text-[var(--text-secondary)]'}`}>
+                <i className="fab fa-whatsapp mr-1.5" aria-hidden="true"></i>
+                {!win ? 'Checking WhatsApp…' : win.open ? `The customer wrote in the last 24 hours, so you can send a normal message${win.until ? ` until ${new Date(win.until).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}` : ''}.` : win.enforced === false ? 'Normal messages are allowed.' : 'The customer has not written in the last 24 hours, so WhatsApp only allows an approved template message.'}
+              </p>
+              {(mustUseTemplate || tpl || !win?.open) && (
+                <div className="space-y-2">
+                  <label htmlFor="wa-template" className="block text-[11px] font-semibold text-[var(--text-secondary)]">Template message</label>
+                  <select id="wa-template" value={tplId} onChange={e => pickTemplate(e.target.value)} className={inputCls(showErrors && !!errors.template)}>
+                    <option value="">{mustUseTemplate ? 'Choose a template' : 'No template (write a normal message)'}</option>
+                    {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                  {tpl && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {tpl.params.map((label, i) => (
+                        <input key={i} aria-label={label} placeholder={label} value={tplParams[i] || ''} onChange={e => setTplParams(p => p.map((v, j) => (j === i ? e.target.value : v)))} className={inputCls(showErrors && !(tplParams[i] || '').trim())} />
+                      ))}
+                      <p className="sm:col-span-2 text-xs text-[var(--text-secondary)] bg-[var(--dark-bg)] rounded-lg p-2.5 border border-[var(--border-color)]" data-testid="wa-preview">{renderedTemplate}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+          {kind === 'whatsapp' && !sendMode && (
             <div>
               <p className="text-[11px] font-semibold text-[var(--text-secondary)] mb-1.5">Whose message is this?</p>
               <div className="flex flex-wrap items-center gap-2">
@@ -130,7 +199,13 @@ const LogUpdateBar: React.FC<LogUpdateBarProps> = ({ lead, focusTaskId, preset, 
               </div>
             </div>
           )}
-          {kind === 'call' && (
+          {kind === 'call' && callLog && (
+            <p className="text-xs text-[var(--text-primary)] bg-[var(--dark-bg)] rounded-lg p-2.5 border border-[var(--border-color)] flex items-center gap-2" data-testid="call-captured">
+              <i className="fas fa-phone-alt text-[var(--primary-color)]" aria-hidden="true"></i>
+              <span>This call was captured by the system{callLog.durationSec ? `: ${Math.floor(callLog.durationSec / 60)}m ${callLog.durationSec % 60}s` : ''}{callLog.recordingUrl ? ', recording attached' : ''}.</span>
+            </p>
+          )}
+          {kind === 'call' && !callLog && (
             <div>
               <p className="text-[11px] font-semibold text-[var(--text-secondary)] mb-1.5">Call recording <span className="font-normal">(optional)</span></p>
               <div className="flex flex-wrap items-center gap-2">
@@ -169,7 +244,7 @@ const LogUpdateBar: React.FC<LogUpdateBarProps> = ({ lead, focusTaskId, preset, 
             </div>
           </div>
           )}
-          {showErrors && (errors.text || errors.next) && <p role="alert" className="text-xs text-red-500"><i className="fas fa-exclamation-circle mr-1" aria-hidden="true"></i>{errors.text || errors.next}</p>}
+          {((showErrors && (errors.text || errors.next || errors.template)) || sendError) && <p role="alert" className="text-xs text-red-500"><i className="fas fa-exclamation-circle mr-1" aria-hidden="true"></i>{sendError || errors.text || errors.template || errors.next}</p>}
         </div>
       )}
       <div className="px-3 flex items-center gap-2 md:h-[64px] py-2 md:py-0">
@@ -179,11 +254,11 @@ const LogUpdateBar: React.FC<LogUpdateBarProps> = ({ lead, focusTaskId, preset, 
               className={`h-8 w-8 rounded-full flex items-center justify-center text-xs transition-colors ${kind === k.key ? 'bg-[var(--primary-color)] text-white' : 'text-[var(--text-secondary)] hover:bg-[var(--light-bg)] hover:text-[var(--text-primary)]'}`}><i className={k.icon} aria-hidden="true"></i></button>
           ))}
         </div>
-        <input ref={inputRef} type="text" aria-label="Add a note" value={text} onChange={e => setText(e.target.value)} onFocus={() => setOpen(true)} onKeyDown={e => { if (e.key === 'Enter') save(); }}
-          placeholder={kind === 'note' ? 'Add a note or update…' : kind === 'call' ? 'What did you discuss on the call?' : kind === 'whatsapp' ? 'What was said on WhatsApp?' : 'What was decided in the meeting?'}
+        <input ref={inputRef} type="text" aria-label="Add a note" value={text} onChange={e => setText(e.target.value)} onFocus={() => setOpen(true)} onKeyDown={e => { if (e.key === 'Enter') void save(); }}
+          placeholder={kind === 'note' ? 'Add a note or update…' : kind === 'call' ? 'What did you discuss on the call?' : kind === 'whatsapp' ? (sendMode ? 'Type the WhatsApp message to send' : 'What was said on WhatsApp?') : 'What was decided in the meeting?'}
           className="flex-1 min-w-0 h-10 bg-[var(--input-bg)] rounded-full px-4 text-sm border border-[var(--border-color)] text-[var(--text-primary)] outline-none focus:border-[var(--primary-color)]" />
         <button type="button" onClick={() => setOpen(o => !o)} aria-label={open ? 'Hide next steps' : 'Show next steps'} aria-expanded={open} title="Status and next follow-up" className="h-8 w-8 shrink-0 rounded-full flex items-center justify-center text-[var(--text-secondary)] hover:bg-[var(--light-bg)]"><i className={`fas fa-chevron-${open ? 'down' : 'up'} text-xs`} aria-hidden="true"></i></button>
-        <button onClick={save} aria-label="Save update" title="Save update" className="bg-[var(--primary-color)] w-10 h-10 shrink-0 rounded-full flex items-center justify-center text-white transition-opacity hover:opacity-90"><i className="fas fa-paper-plane text-sm" aria-hidden="true"></i></button>
+        <button onClick={() => void save()} disabled={sending} aria-label={sendMode ? 'Send WhatsApp and save' : 'Save update'} title={sendMode ? 'Send on WhatsApp and save' : 'Save update'} className="bg-[var(--primary-color)] disabled:opacity-60 w-10 h-10 shrink-0 rounded-full flex items-center justify-center text-white transition-opacity hover:opacity-90"><i className="fas fa-paper-plane text-sm" aria-hidden="true"></i></button>
       </div>
     </div>
   );

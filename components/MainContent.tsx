@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Lead, Message, TaskStatus, SiteVisitStatus, LifecycleStage, LeadLifecycleStatus, User, Project, PaymentPlan, CustomerDocument, BookingDetails } from '../types';
+import { Lead, Message, TaskStatus, SiteVisitStatus, LifecycleStage, LeadLifecycleStatus, User, Project, PaymentPlan, CustomerDocument, BookingDetails, CallLog, WhatsAppTemplate } from '../types';
 import MessageBubble from './MessageBubble';
 import LeadDetail from './LeadDetail';
 import BookingDetailTab from './BookingDetailTab';
@@ -10,6 +10,9 @@ import { v4 as uuidv4 } from 'uuid';
 import { PIPELINE_STEPS, buildTimeline, callNumber, customerCode, friendlyDate, getPipelineStep, leadCode, leadSummary, openWhatsApp, time12, todayISO } from './leadUi';
 import { toast } from './ui/Toast';
 import LogUpdateBar, { LogUpdatePayload } from './LogUpdateBar';
+import CallBar from './CallBar';
+import { integrationsApi } from '../httpClient';
+import { notifyChange } from '../liveQuery';
 import { Modal, Field, Chips, inputCls } from './ui/Modal';
 
 type ContentTab = 'chat' | 'history' | 'details' | 'siteVisit' | 'booking' | 'ledger' | 'documents';
@@ -22,6 +25,13 @@ interface MainContentProps {
   onSendMessage: (leadId: string, message: Message) => void;
   /** Saves a contact in one go: the message, the follow-up it completes, the status now and the next follow-up. */
   onLogUpdate: (leadId: string, payload: LogUpdatePayload) => void;
+  /** Calling / WhatsApp through the company's providers (when switched on under Admin > Integrations). */
+  integrations?: { telephony: boolean; whatsapp: boolean };
+  callLogs?: CallLog[];
+  whatsappTemplates?: WhatsAppTemplate[];
+  currentUserId?: string;
+  currentUserName?: string;
+  companyName?: string;
   onRescheduleFollowUp: (leadId: string, taskId: string, date: string, time: string) => void;
   onBackButtonClick: () => void;
   onToggleFollowUpModal: () => void;
@@ -75,6 +85,12 @@ const MainContent: React.FC<MainContentProps> = ({
   paymentPlans,
   onSendMessage,
   onLogUpdate,
+  integrations,
+  callLogs,
+  whatsappTemplates,
+  currentUserId,
+  currentUserName,
+  companyName,
   onRescheduleFollowUp,
   onBackButtonClick,
   onToggleFollowUpModal,
@@ -98,6 +114,33 @@ const MainContent: React.FC<MainContentProps> = ({
 }) => {
   const [focusTaskId, setFocusTaskId] = React.useState<string | null>(null);
   const [logPreset, setLogPreset] = React.useState<{ kind: 'call' | 'whatsapp'; n: number } | null>(null);
+
+  // Calls made from the system: the one in progress, and the last finished one that has not been written up.
+  const ENDED = ['completed', 'no-answer', 'busy', 'failed'];
+  const myCalls = React.useMemo(() => (callLogs || []).filter(c => c.leadId === selectedLead?.id && c.userId === currentUserId).sort((a, b) => b.startedAt.localeCompare(a.startedAt)), [callLogs, selectedLead?.id, currentUserId]);
+  const activeCall = myCalls.find(c => !ENDED.includes(c.status));
+  const callToLog = myCalls.find(c => ENDED.includes(c.status) && !c.logged) || null;
+  // When a call ends, open the write-up by itself (call type, length and recording are already filled in).
+  const seenStatus = React.useRef<Record<string, string>>({});
+  React.useEffect(() => {
+    for (const c of myCalls) {
+      const was = seenStatus.current[c.id];
+      if (was && was !== c.status && ENDED.includes(c.status) && !c.logged) { setLogPreset(p => ({ kind: 'call', n: (p?.n || 0) + 1 })); setActiveContentTab('chat'); }
+      seenStatus.current[c.id] = c.status;
+    }
+  }, [myCalls]);
+  const startCall = async () => {
+    if (!selectedLead) return;
+    if (!integrations?.telephony) { callNumber(selectedLead.phone); setLogPreset(p => ({ kind: 'call', n: (p?.n || 0) + 1 })); setActiveContentTab('chat'); return; }
+    setActiveContentTab('chat');
+    try { await integrationsApi.startCall(selectedLead.id); notifyChange('callLogs'); }
+    catch (e: any) { toast.error(e?.message || 'The call could not be started.'); }
+  };
+  const openWhatsAppUpdate = () => {
+    if (!selectedLead) return;
+    if (!integrations?.whatsapp) openWhatsApp(selectedLead.phone);
+    setLogPreset(p => ({ kind: 'whatsapp', n: (p?.n || 0) + 1 })); setActiveContentTab('chat');
+  };
   const [rescheduling, setRescheduling] = React.useState<{ taskId: string; title: string } | null>(null);
   const chatContainerRef = React.useRef<HTMLDivElement>(null);
 
@@ -130,12 +173,13 @@ const MainContent: React.FC<MainContentProps> = ({
     if (activeContentTab === 'chat') {
       return (
         <>
+          <CallBar leadName={selectedLead.name} active={activeCall} toLog={callToLog} onLog={() => setLogPreset(p => ({ kind: 'call', n: (p?.n || 0) + 1 }))} />
           <div ref={chatContainerRef} className="flex-1 p-3 sm:p-5 overflow-y-auto flex flex-col gap-2 custom-scrollbar">
             {(selectedLead.messages || []).map((message) => (
               <MessageBubble key={message.id} message={message} />
             ))}
           </div>
-          <LogUpdateBar lead={selectedLead} focusTaskId={focusTaskId} preset={logPreset} onClearFocus={() => setFocusTaskId(null)} onSave={(payload) => onLogUpdate(selectedLead.id, payload)} />
+          <LogUpdateBar lead={selectedLead} focusTaskId={focusTaskId} preset={logPreset} callLog={callToLog} integrations={integrations} templates={whatsappTemplates} userName={currentUserName} companyName={companyName} onSendWhatsApp={async (body) => { await integrationsApi.sendWhatsApp({ leadId: selectedLead.id, ...body }); notifyChange('leads'); }} onClearFocus={() => setFocusTaskId(null)} onSave={(payload) => onLogUpdate(selectedLead.id, payload)} />
         </>
       );
     }
@@ -259,8 +303,8 @@ const MainContent: React.FC<MainContentProps> = ({
         <div className="flex flex-col items-end justify-center gap-0.5 shrink-0">
           <div className="hidden md:block">{idChips}</div>
           <div className="flex items-center">
-          {selectedLead.phone && <button type="button" onClick={() => { callNumber(selectedLead.phone); setLogPreset(p => ({ kind: 'call', n: (p?.n || 0) + 1 })); setActiveContentTab('chat'); }} className={iconBtn} aria-label="Call" title="Call"><i className="fas fa-phone-alt text-sm" aria-hidden="true"></i></button>}
-          {selectedLead.phone && <button type="button" onClick={() => { openWhatsApp(selectedLead.phone); setLogPreset(p => ({ kind: 'whatsapp', n: (p?.n || 0) + 1 })); setActiveContentTab('chat'); }} className={iconBtn} aria-label="Open WhatsApp" title="Open WhatsApp, then log it here"><i className="fab fa-whatsapp text-base" aria-hidden="true"></i></button>}
+          {selectedLead.phone && <button type="button" onClick={() => void startCall()} className={iconBtn} aria-label="Call" title={integrations?.telephony ? 'Call from the system' : 'Call'}><i className="fas fa-phone-alt text-sm" aria-hidden="true"></i></button>}
+          {selectedLead.phone && <button type="button" onClick={openWhatsAppUpdate} className={iconBtn} aria-label="Open WhatsApp" title={integrations?.whatsapp ? 'WhatsApp from the system' : 'Open WhatsApp, then log it here'}><i className="fab fa-whatsapp text-base" aria-hidden="true"></i></button>}
           <button onClick={onToggleFollowUpModal} className={iconBtn} aria-label="Schedule follow-up" title="Schedule follow-up"><i className="fas fa-bell text-sm" aria-hidden="true"></i></button>
           {onToggleSiteVisitModal && <button onClick={onToggleSiteVisitModal} className={iconBtn} aria-label="Schedule site visit" title="Schedule site visit"><i className="fas fa-map-marker-alt text-sm" aria-hidden="true"></i></button>}
           <button onClick={() => onToggleEditLeadModal(selectedLead)} className={iconBtn} aria-label="Edit lead" title="Edit lead"><i className="fas fa-pen text-sm" aria-hidden="true"></i></button>

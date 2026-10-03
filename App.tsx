@@ -14,7 +14,8 @@ import { v4 as uuidv4 } from 'uuid';
 import InstallationWizard from './components/InstallationWizard';
 import SetupWizard from './components/SetupWizard';
 import AdminPanel from './components/admin/AdminPanel';
-import { tenantApi, getToken, setToken, onUnauthorized, authApi } from './httpClient';
+import { tenantApi, getToken, setToken, onUnauthorized, authApi, openEvents } from './httpClient';
+import { notifyChange } from './liveQuery';
 import { currentTenant, tenantUrl, mainSiteUrl } from './tenant';
 import WorkspaceFinder from './components/WorkspaceFinder';
 import { PlanId } from './plans';
@@ -45,7 +46,7 @@ const App: React.FC = () => {
     return (localStorage.getItem('lastActiveSystem') as SystemType) || 'LeadSarv';
   });
   const [showInstallationWizard, setShowInstallationWizard] = React.useState<boolean>(false);
-  const [workspaceInfo, setWorkspaceInfo] = React.useState<{ plan?: string | null; modules?: { crm?: boolean; erp?: boolean } } | null>(null);
+  const [workspaceInfo, setWorkspaceInfo] = React.useState<{ plan?: string | null; modules?: { crm?: boolean; erp?: boolean }; integrations?: { telephony: boolean; whatsapp: boolean } } | null>(null);
   const [wizardPlan, setWizardPlan] = React.useState<PlanId | undefined>(undefined);
 
   // viewState controls exactly what the user sees: the marketing landing page, the sign-in screen, or the app itself
@@ -84,6 +85,8 @@ const App: React.FC = () => {
   const userDesignations = useLiveQuery(() => db.userDesignations.toArray(), []);
   const channelPartners = useLiveQuery(() => db.channelPartners.toArray(), []);
   const distributionRules = useLiveQuery(() => db.distributionRules.toArray(), []);
+  const callLogs = useLiveQuery(() => db.callLogs.toArray(), []);
+  const whatsappTemplates = useLiveQuery(() => db.whatsappTemplates.toArray(), []);
   const formFieldConfigs = useLiveQuery(() => db.formFieldConfigs.toArray(), []);
   const companyProfile = useLiveQuery(async () => (await db.companyProfile.toArray())[0]);
   const financialSettings = useLiveQuery(async () => (await db.financialSettings.toArray())[0]);
@@ -162,6 +165,12 @@ const App: React.FC = () => {
     if (viewState !== 'authenticated') { setWorkspaceInfo(null); return; }
     authApi.workspace().then(setWorkspaceInfo).catch(() => setWorkspaceInfo(null));
   }, [viewState]);
+  // Live updates: a call changing state or a WhatsApp reply arriving refreshes the screens that show them.
+  React.useEffect(() => {
+    if (viewState !== 'authenticated') return;
+    return openEvents((e) => { if (e.type === 'call') notifyChange('callLogs'); else if (e.type === 'lead') notifyChange('leads'); });
+  }, [viewState]);
+
   const access = React.useMemo(() => accessFor(currentUser?.role, userRoleSettings), [currentUser?.role, userRoleSettings]);
   const lockedSystems: SystemType[] = (['ProjectSarv', 'FinanceSarv'] as SystemType[]).filter(
     (s) => workspaceInfo?.modules?.erp === false || !access.has(s));
@@ -267,6 +276,11 @@ const App: React.FC = () => {
           channelPartners={channelPartners}
           distributionRules={distributionRules}
           onSaveDistributionRule={async (r) => { await db.distributionRules.put(r); }}
+          integrations={workspaceInfo?.integrations}
+          companyName={companyProfile?.name}
+          callLogs={callLogs}
+          whatsappTemplates={whatsappTemplates}
+          onMarkCallLogged={async (id) => { await db.callLogs.update(id, { logged: true }); }}
           leads={leads}
           users={users}
           projects={projects}

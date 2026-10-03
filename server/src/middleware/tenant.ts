@@ -32,7 +32,7 @@ export function subdomainFromHost(hostHeader: string | undefined): string | null
 /** Dev/testing fallback for hosts that can't have subdomains (Codespaces, IPs): the X-Workspace header. Off by default. */
 function workspaceFromHeader(req: TenantRequest): string | null {
   if (process.env.ALLOW_WORKSPACE_HEADER !== 'true') return null;
-  const v = String(req.headers['x-workspace'] ?? '').trim().toLowerCase();
+  const v = String(req.headers['x-workspace'] ?? req.query.workspace ?? '').trim().toLowerCase();
   return SUBDOMAIN_RE.test(v) && !RESERVED_SUBDOMAINS.has(v) ? v : null;
 }
 

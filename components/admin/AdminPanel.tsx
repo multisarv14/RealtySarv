@@ -214,7 +214,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
         switch(activeSubSection) {
             case 'lead-acquisition': return <AdminLeadIntegrations onNavigate={(target) => setActiveSubSection(target)} />;
             case 'portals': return <AdminPropertyPortals />;
-            case 'communication': return <AdminCommunicationIntegrations />;
+            case 'communication': return <AdminCommunicationIntegrations leads={props.leads} />;
             case 'payment-gateways': return <AdminPaymentIntegrations />;
             case 'accounting': return <AdminAccountingIntegrations />;
             case 'marketing': return <AdminMarketingIntegrations />;

@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import { randomUUID } from 'crypto';
 import { TenantModels } from './models';
 import { toDoc } from './models';
 import * as C from '../../constants';
@@ -16,6 +17,13 @@ const data: Record<string, any[]> = {
   userRoleSettings: C.INITIAL_USER_ROLE_SETTINGS, userDesignations: C.INITIAL_USER_DESIGNATIONS,
   channelPartners: C.INITIAL_CHANNEL_PARTNERS, distributionRules: C.INITIAL_DISTRIBUTION_RULES, formFieldConfigs: C.INITIAL_FORM_FIELD_CONFIGS,
   companyProfile: [C.INITIAL_COMPANY_PROFILE],
+  // The demo company is wired to the built-in simulator, so calling and WhatsApp can be tried without any vendor account.
+  integrationSettings: [{ id: 'main', webhookSecret: randomUUID().replace(/-/g, ''), telephony: { enabled: true, provider: 'simulator' }, whatsapp: { enabled: true, provider: 'simulator', enforceWindow: true, simulatorAutoReply: false } }],
+  whatsappTemplates: [
+    { id: 'wt-hello', name: 'Introduction', body: 'Hello {{1}}, this is {{2}} from {{3}}. Thank you for your interest. When would be a good time to talk?', params: ['Customer name', 'Your name', 'Company'] },
+    { id: 'wt-visit', name: 'Site visit reminder', body: 'Hi {{1}}, a reminder of your site visit to {{2}} on {{3}} at {{4}}. We look forward to meeting you.', params: ['Customer name', 'Project', 'Date', 'Time'] },
+    { id: 'wt-followup', name: 'Follow-up', body: 'Hello {{1}}, just checking in about {{2}}. Please let me know if you would like the price sheet or a site visit.', params: ['Customer name', 'Project'] },
+  ],
   financialSettings: [{ id: 1, ...C.INITIAL_FINANCIAL_SETTINGS }],
   applicationSettings: [{ id: 1, ...C.INITIAL_APPLICATION_SETTINGS }],
   ledgerAccounts: [
@@ -54,7 +62,7 @@ const data: Record<string, any[]> = {
 // Tables that hold a tenant's own business data. A brand-new tenant starts with these empty
 // (but keeps the configuration/master-data tables above), exactly like the old install wizard.
 export const OPERATIONAL = [
-  'users', 'leads', 'projects', 'channelPartners', 'distributionRules', 'vendors', 'purchaseRequisitions', 'purchaseOrders', 'workOrders',
+  'users', 'leads', 'projects', 'channelPartners', 'distributionRules', 'integrationSettings', 'callLogs', 'vendors', 'purchaseRequisitions', 'purchaseOrders', 'workOrders',
   'materialStock', 'dailyProgressReports', 'projectPhases', 'costBudgets', 'boqs', 'boqItems', 'vouchers', 'gstEntries',
 ];
 
