@@ -532,12 +532,12 @@ describe('CRM: forms and popups (these change data)', () => {
     assert.match(await box.innerText(), /Write what happened|Pick the date and time/, 'an empty update is refused');
     await box.getByRole('button', { name: 'Call', exact: true }).click(); await p.waitForTimeout(200);
     await box.getByLabel('Add a note').fill('Spoke, wants a weekend visit');
-    await box.getByRole('radio', { name: 'Spoke' }).click();
+    await box.getByLabel('Outcome').selectOption('Spoke');
     await box.getByRole('button', { name: 'Save update' }).click(); await p.waitForTimeout(250);
     assert.match(await box.innerText(), /Pick the date and time of the next follow-up/, 'the next follow-up is needed while the lead is still open');
-    assert.equal(await box.getByLabel('Mark follow-up done').isChecked(), true, 'the due follow-up is ticked by default');
+    assert.equal(await box.getByLabel('Mark done').isChecked(), true, 'the due follow-up is ticked by default');
     await box.locator('#log-status').selectOption('Qualified');
-    await box.getByRole('radio', { name: 'In 3 days' }).click();
+    await box.getByLabel('Quick date').selectOption('In 3 days');
     await box.getByRole('button', { name: 'Save update' }).click(); await p.waitForTimeout(1200);
     const after = (await apiLeads()).find((l) => l.id === before.id);
     const last = after.messages[after.messages.length - 1];
@@ -547,7 +547,8 @@ describe('CRM: forms and popups (these change data)', () => {
     assert.equal(old.status, 'Completed', 'the follow-up that was due is done');
     const next = after.tasks.filter((t) => t.status === 'Pending' && t.title.startsWith('Follow-up:'));
     assert.equal(next.length, 1, 'and exactly one new one is pending'); assert.ok(next[0].dueDate > new Date().toISOString().split('T')[0]); assert.match(next[0].description, /Scheduled for 11:00/);
-    assert.match(await p.locator('[data-testid=message-bubble]').last().innerText(), /Call/);
+    assert.match(await p.getByTestId('team-note').last().innerText(), /Call/);
+    assert.match(await p.getByTestId('team-note').last().innerText(), /Team only/, 'a call note says it stays inside the team');
   });
   test('Timeline: Done opens the update with the follow-up ticked; Reschedule moves it', async () => {
     const target = (await apiLeads()).find((l) => l.bookingStatus !== 'Booked' && !l.tokenAmount && (l.tasks || []).some((t) => t.status === 'Pending' && t.title.startsWith('Follow-up:')) && !/Test|Qa/.test(l.name));
@@ -562,7 +563,7 @@ describe('CRM: forms and popups (these change data)', () => {
     const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
     assert.ok(moved.some((t) => t.dueDate === tomorrow), 'moved to tomorrow');
     await todo.getByRole('button', { name: 'Done' }).first().click(); await p.waitForTimeout(400);
-    assert.equal(await p.getByTestId('log-update').getByLabel('Mark follow-up done').isChecked(), true, 'opens on the Activity tab with the follow-up ticked');
+    assert.equal(await p.getByTestId('log-update').getByLabel('Mark done').isChecked(), true, 'opens on the Activity tab with the follow-up ticked');
     assert.ok(await p.getByTestId('log-update').locator('#log-status').isVisible(), 'status and next follow-up are in view');
   });
   test('Log update: Unqualified needs no next follow-up and closes the open ones', async () => {
@@ -573,11 +574,11 @@ describe('CRM: forms and popups (these change data)', () => {
     await p.locator('[role=button][tabindex="0"]').first().click(); await p.waitForTimeout(500);
     const box = p.getByTestId('log-update');
     await box.getByLabel('Add a note').fill('Budget too low, not looking now'); await p.waitForTimeout(200);
-    assert.ok(await box.getByText('Next follow-up', { exact: false }).first().isVisible(), 'asked for while the lead is open');
+    assert.ok(await box.getByLabel('Next follow-up date').isVisible(), 'asked for while the lead is open');
     await box.locator('#log-status').selectOption('Unqualified'); await p.waitForTimeout(200);
     assert.equal(await box.getByText(/No next follow-up is needed/).isVisible(), true);
     assert.equal(await box.getByLabel('Next follow-up date').count(), 0, 'no date to fill in');
-    await box.getByLabel('Mark follow-up done').uncheck(); // so the due follow-up is closed by the status, not completed
+    await box.getByLabel('Mark done').uncheck(); // so the due follow-up is closed by the status, not completed
     await box.getByRole('button', { name: 'Save update' }).click(); await p.waitForTimeout(1200);
     const after = (await apiLeads()).find((l) => l.id === before.id);
     assert.equal(after.leadStatus, 'Unqualified');
@@ -585,6 +586,20 @@ describe('CRM: forms and popups (these change data)', () => {
     assert.ok((after.tasks || []).some((t) => t.status === 'Cancelled'), 'the open ones are closed, not left overdue');
     assert.equal((after.tasks || []).length, before.tasks.length, 'and no new follow-up was made');
     await tab(p, 'Timeline'); assert.match(await p.getByTestId('lead-timeline').innerText(), /closed/);
+  });
+  test('Activity: team notes and calls are not chat bubbles, and only WhatsApp is sent to the customer', async () => {
+    const withNotes = (await apiLeads()).find((l) => (l.messages || []).some((m) => m.sender === 'received') && (l.messages || []).some((m) => m.sender === 'sent' && !m.kind) && l.bookingStatus !== 'Booked' && !l.tokenAmount && (l.tasks || []).some((t) => t.status === 'Pending' && t.title.startsWith('Follow-up:')) && !/Test|Qa/.test(l.name));
+    await menu(p, MENU.leads); await tab(p, 'Follow-up');
+    await p.getByLabel('Search leads').fill(withNotes.name); await p.waitForTimeout(400);
+    await p.locator('[role=button][tabindex="0"]').first().click(); await p.waitForTimeout(500);
+    assert.ok((await p.getByTestId('team-note').count()) >= 1, 'what the team wrote is shown as a team note');
+    assert.ok((await p.getByTestId('message-bubble').count()) >= 1, 'the customer\'s own message is still a chat bubble');
+    assert.equal(await p.locator('[data-testid=team-note] [data-wa-status]').count(), 0, 'no delivery ticks on a note');
+    assert.match(await p.getByTestId('team-note').first().innerText(), /Team only/);
+    const box = p.getByTestId('log-update');
+    assert.equal(await box.getByLabel('Save update').locator('i.fa-paper-plane').count(), 0, 'saving a note is not a "send" button');
+    assert.match(await box.getByLabel('Add a note').getAttribute('placeholder'), /not sent to the customer/);
+    await box.getByLabel('Add a note').focus(); await p.waitForTimeout(300);
   });
   test('Log update: a call can carry its recording, and it plays in the Activity feed', async () => {
     const before = (await apiLeads()).filter((l) => l.bookingStatus !== 'Booked' && !l.tokenAmount && l.leadStatus === 'New' && !/Test|Qa/.test(l.name))[0];
@@ -594,16 +609,13 @@ describe('CRM: forms and popups (these change data)', () => {
     const box = p.getByTestId('log-update');
     await box.getByRole('button', { name: 'Call', exact: true }).click(); await p.waitForTimeout(200);
     await box.getByLabel('Add a note').fill('Discussed budget on the call');
-    await box.getByLabel('Recording link').fill('not-a-link');
+    assert.equal(await box.getByLabel('Recording link').count(), 0, 'there is no link field, only Attach audio');
+    await box.getByLabel('Recording file').setInputFiles({ name: 'call-1.mp3', mimeType: 'audio/mpeg', buffer: Buffer.from('ID3fake-audio') });
     await box.getByLabel('Next follow-up date').fill(new Date(Date.now() + 2 * 86400000).toISOString().split('T')[0]);
-    await box.getByRole('button', { name: 'Save update' }).click(); await p.waitForTimeout(300);
-    assert.match(await box.innerText(), /must start with http/);
-    await box.getByLabel('Recording link').fill('https://example.com/recordings/call-1.mp3');
     await box.getByRole('button', { name: 'Save update' }).click(); await p.waitForTimeout(1200);
     const msg = (await apiLeads()).find((l) => l.id === before.id).messages.slice(-1)[0];
-    assert.equal(msg.kind, 'call'); assert.equal(msg.recordingUrl, 'https://example.com/recordings/call-1.mp3');
+    assert.equal(msg.kind, 'call'); assert.match(msg.recordingUrl, /^data:audio\//); assert.equal(msg.recordingName, 'call-1.mp3');
     assert.equal(await p.getByTestId('call-recording').last().locator('audio').count(), 1, 'an audio player is in the feed');
-    assert.match(await p.getByTestId('call-recording').last().innerText(), /Open/);
   });
   test('Log update: WhatsApp keeps the customer reply on the customer side, and the header button prepares it', async () => {
     // Without a WhatsApp provider switched on, the person logs it by hand (that is the path under test).
@@ -646,10 +658,10 @@ describe('CRM: forms and popups (these change data)', () => {
     await box.locator('#log-status').waitFor({ timeout: 15000 });   // opens by itself when the call ends
     assert.equal(await box.getByRole('button', { name: 'Call', exact: true }).getAttribute('aria-pressed'), 'true', 'already a call update');
     assert.match(await box.getByTestId('call-captured').innerText(), /2m 14s.*recording attached/);
-    assert.equal(await box.getByLabel('Recording link').count(), 0, 'no manual recording field: it is attached already');
+    assert.equal(await box.getByLabel('Recording file').count(), 0, 'no manual recording field: it is attached already');
     await box.getByLabel('Add a note').fill('Discussed the 3BHK and the payment plan');
-    await box.getByRole('radio', { name: 'Spoke' }).click();
-    await box.getByRole('radio', { name: 'Tomorrow' }).click();
+    await box.getByLabel('Outcome').selectOption('Spoke');
+    await box.getByLabel('Quick date').selectOption('Tomorrow');
     await box.getByRole('button', { name: 'Save update' }).click(); await p.waitForTimeout(1500);
     const after = (await apiLeads()).find((l) => l.id === lead.id);
     const m = after.messages[after.messages.length - 1];
@@ -666,18 +678,18 @@ describe('CRM: forms and popups (these change data)', () => {
     await p.locator('[role=button][tabindex="0"]').first().click(); await p.waitForTimeout(500);
     await p.getByTitle('WhatsApp from the system').click(); await p.waitForTimeout(600);
     const box = p.getByTestId('log-update');
-    assert.match(await box.getByTestId('whatsapp-window').innerText(), /only allows an approved template/);
+    assert.match(await box.getByTestId('whatsapp-window').innerText(), /24h passed/);
     await box.getByLabel('Add a note').fill('Hello there');
     await box.getByRole('button', { name: 'Send WhatsApp and save' }).click(); await p.waitForTimeout(300);
     assert.match(await box.innerText(), /Pick one|approved template/, 'a normal message is refused while the window is closed');
     await box.locator('#wa-template').selectOption({ label: 'Introduction' }); await p.waitForTimeout(200);
     const preview = await box.getByTestId('wa-preview').innerText();
     assert.ok(preview.includes('Hello ' + lead.name.split(' ')[0]) && preview.includes('Sandeep Shah') && preview.includes('MultiSarv'), 'the blanks are filled in from what the app knows: ' + preview);
-    await box.getByRole('radio', { name: 'Tomorrow' }).click();
+    await box.getByLabel('Quick date').selectOption('Tomorrow');
     await box.getByRole('button', { name: 'Send WhatsApp and save' }).click(); await p.waitForTimeout(800);
     const sent = p.locator('[data-testid=message-bubble]').last();
     assert.match(await sent.innerText(), /WhatsApp/); assert.match(await sent.innerText(), /Hello .*this is Sandeep Shah/);
-    await p.waitForFunction(() => document.querySelector('[data-testid=message-bubble]:last-of-type [data-wa-status]')?.getAttribute('data-wa-status') === 'read', null, { timeout: 8000 });
+    await p.waitForFunction(() => { const b = [...document.querySelectorAll('[data-testid=message-bubble]')].pop(); return b?.querySelector('[data-wa-status]')?.getAttribute('data-wa-status') === 'read'; }, null, { timeout: 8000 });
     const after = (await apiLeads()).find((l) => l.id === lead.id);
     assert.equal(after.messages.filter((m) => m.kind === 'whatsapp' && m.sender === 'sent').length, 1, 'saved once, not twice');
     assert.ok((after.tasks || []).some((t) => t.status === 'Pending' && t.title.startsWith('Follow-up:') && t.dueDate > new Date().toISOString().split('T')[0]), 'the next follow-up was booked in the same step');
@@ -687,7 +699,7 @@ describe('CRM: forms and popups (these change data)', () => {
     const reply = p.locator('[data-testid=message-bubble]').last();
     assert.match(await reply.getAttribute('class'), /self-start/, 'on the customer side');
     await box.getByRole('button', { name: 'WhatsApp', exact: true }).click(); await p.waitForTimeout(800);
-    assert.match(await box.getByTestId('whatsapp-window').innerText(), /can send a normal message/);
+    assert.equal(await box.getByTestId('wa-preview').count(), 0, 'inside the 24h window no template is forced');
   });
   test('a stale page cannot bring old leads back (only changed leads are saved)', async () => {
     const t = await adminToken(); const h = hostFor(DEMO);
