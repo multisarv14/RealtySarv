@@ -101,6 +101,10 @@ export function fillInventory(project: Project, types: string[], floors: number,
   project.parkingInventory = parking;
 }
 
+// A lead brought by a broker: the channel is "Channel Partner" and the source is the firm.
+const PARTNER_FIRMS: Record<string, string> = { 'cp-1': 'Elite Realty Brokers', 'cp-2': 'Shree Property Consultants', 'cp-3': 'Kothrud Homes & Estates', 'cp-5': 'Aundh Property Point' };
+const partnerCredit = (id: string) => ({ channelPartnerId: id, channelSource: 'Channel Partner', leadSource: PARTNER_FIRMS[id] });
+
 export function buildDemoLeads(ctx: DemoContext): Lead[] {
   // Units for every project (done first so booked leads can pick real ones)
   const byName = new Map(ctx.projects.map((pr) => [pr.name, pr]));
@@ -298,7 +302,7 @@ export function buildDemoLeads(ctx: DemoContext): Lead[] {
       chatStatus: 'offline', leadStatus: spec.status, read: !spec.unread, messages: msgs,
       email, phone, initialInterest: [interest], siteVisits, tasks, channelSource: channel, leadSource: source,
       preferredLocation: proj.location, budget, clientProfile: PROFILES[i % PROFILES.length], livingPlace: LIVING[i % LIVING.length],
-      propertyImages: [], ownerId: owner.id, ...(i % 4 === 1 ? { channelPartnerId: ['cp-1', 'cp-2', 'cp-1', 'cp-5', 'cp-3'][(i >> 2) % 5] } : {}), leadProject: proj.name, leadDate: dayISO(-spec.ageDays),
+      propertyImages: [], ownerId: owner.id, ...(i % 4 === 1 ? partnerCredit(['cp-1', 'cp-2', 'cp-1', 'cp-5', 'cp-3'][(i >> 2) % 5]) : {}), leadProject: proj.name, leadDate: dayISO(-spec.ageDays),
       bookingStatus: spec.booking ? 'Booked' : 'Pending',
       agreementStatus: spec.booking?.agreement ?? 'Drafted', possessionStatus: spec.booking?.possession ?? 'Pending',
       ...(spec.token ? { tokenAmount: spec.token } : {}),

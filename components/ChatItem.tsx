@@ -14,6 +14,8 @@ interface ChatItemProps {
   onClick: (id: string) => void;
   activeMenu?: ActiveMenu;
   activeLeadTab?: ActiveLeadTab;
+  /** Replaces the last-message time on the right (the Follow-up list shows when the follow-up is due). */
+  timeLabel?: string;
   onScheduleSiteVisit: (leadId: string) => void;
   onScheduleFollowUp: (leadId: string) => void;
   onConfirmBooking?: (leadId: string) => void;
@@ -61,7 +63,8 @@ const ChatItem: React.FC<ChatItemProps> = ({
     onSwitchTab,
     onOpenAtsLineup,
     onOpenRegDetails,
-    onOpenExecutionDetails
+    onOpenExecutionDetails,
+    timeLabel
 }) => {
   const { id, avatarInitials, name, time, chatStatus, leadStatus, leadSource, ownerId, agreementStatus, customData = {} } = lead;
   const [isProcessing, setIsProcessing] = React.useState(false);
@@ -140,7 +143,7 @@ const ChatItem: React.FC<ChatItemProps> = ({
             <span className={`text-[13px] text-[var(--text-primary)] truncate ${lead.read === false ? 'font-bold' : 'font-semibold'}`}>{name}</span>
             <span className="flex items-center gap-1 text-[10px] text-[var(--text-secondary)] shrink-0 transition-opacity group-hover:opacity-0 group-focus-within:opacity-0">
               {lead.read === false && <span className="w-1.5 h-1.5 rounded-full bg-[var(--primary-color)]" title="Not opened yet"></span>}
-              {time}
+              {timeLabel ?? time}
             </span>
             {showActions && (
               <div className="absolute right-0 top-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">

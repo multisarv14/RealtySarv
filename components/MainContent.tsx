@@ -7,7 +7,8 @@ import BookingDetailTab from './BookingDetailTab';
 import LedgerTab from './LedgerTab';
 import DocumentHub from './DocumentHub';
 import { v4 as uuidv4 } from 'uuid';
-import { PIPELINE_STEPS, callNumber, getPipelineStep, leadSummary, openWhatsApp } from './leadUi';
+import { PIPELINE_STEPS, callNumber, customerCode, getPipelineStep, leadCode, leadSummary, openWhatsApp } from './leadUi';
+import { toast } from './ui/Toast';
 
 type ContentTab = 'chat' | 'history' | 'details' | 'siteVisit' | 'booking' | 'ledger' | 'documents';
 
@@ -233,7 +234,15 @@ const MainContent: React.FC<MainContentProps> = ({
               <span className="text-[var(--text-primary)] font-bold text-sm leading-tight truncate">{selectedLead.name}</span>
               <span className="shrink-0 px-1.5 py-px rounded-full text-[10px] font-semibold bg-[var(--primary-color)]/15 text-[var(--primary-color)]" title="Where this lead is in the sales journey">{PIPELINE_STEPS[step]}</span>
             </div>
-            <div className="text-[11.5px] text-[var(--text-secondary)] truncate">{leadSummary(selectedLead) || selectedLead.leadProject}</div>
+            <div className="text-[11.5px] text-[var(--text-secondary)] truncate" data-testid="lead-facts">
+              {[selectedLead.leadProject && selectedLead.leadProject !== 'Not Assigned' ? selectedLead.leadProject : 'No project', [selectedLead.channelSource, selectedLead.leadSource].filter(Boolean).join(' › '), `Owner ${users.find(u => u.id === selectedLead.ownerId)?.name || 'unassigned'}`].filter(Boolean).join(' · ')}
+            </div>
+            <div className="text-[10.5px] text-[var(--text-secondary)] truncate flex items-center gap-1.5">
+              {([['Lead ID', leadCode(selectedLead)], ['Customer ID', customerCode(selectedLead)]] as const).map(([label, value]) => (
+                <button key={label} type="button" title={`Copy ${label}`} onClick={() => { navigator.clipboard?.writeText(value); toast.info(`${label} ${value} copied.`); }}
+                  className="font-mono px-1.5 py-px rounded bg-[var(--light-bg)] hover:text-[var(--text-primary)] transition-colors"><span className="font-sans opacity-70">{label}</span> {value}</button>
+              ))}
+            </div>
           </div>
         </div>
         <div className="flex items-center shrink-0">

@@ -27,6 +27,22 @@ const menu = async (p, icon) => { await p.locator(`button:has(i.${icon})`).first
 const tab = async (p, name) => { await p.getByRole('tab', { name: new RegExp('^' + name, 'i') }).first().click(); await p.waitForTimeout(350); };
 const rows = (p) => p.locator('[role=button][tabindex="0"]').count();
 const apiLeads = async () => (await call('/leads', { host: hostFor(DEMO), token: await adminToken() })).body;
+/** Fill the three-step lead wizard (Contact, More details, First follow-up) and create the lead. */
+async function newLead(p, o) {
+  const d = () => p.locator('[role=dialog]').last();
+  await p.getByRole('button', { name: 'New lead' }).click(); await p.waitForTimeout(300);
+  await p.fill('#lm-first', o.first); await p.fill('#lm-last', o.last); await p.fill('#lm-phone', o.phone); await p.fill('#lm-email', o.email);
+  if (o.project) await p.selectOption('#lm-project', { label: o.project }); else await p.selectOption('#lm-project', { index: 1 });
+  if (o.channel) await p.selectOption('#lm-channel', { label: o.channel }); else await p.selectOption('#lm-channel', { index: 1 });
+  if (o.source) await p.selectOption('#lm-source', { label: o.source }); else await p.selectOption('#lm-source', { index: 1 });
+  await d().getByRole('button', { name: 'Next' }).click(); await p.waitForTimeout(250);
+  await d().getByRole('button', { name: '2BHK', exact: true }).click(); await p.selectOption('#lm-loc', { index: 1 }); await p.selectOption('#lm-budget', { index: 1 });
+  if (o.owner) await p.selectOption('#lm-owner', { label: o.owner });
+  if (o.remark) await p.fill('#lm-msg', o.remark);
+  await d().getByRole('button', { name: 'Next' }).click(); await p.waitForTimeout(250);
+  if (o.followUp) { await d().getByRole('radio', { name: 'Tomorrow' }).click(); await p.fill('#lm-fu-time', '11:00'); }
+  await d().getByRole('button', { name: 'Create lead' }).click(); await p.waitForTimeout(1500);
+}
 const MENU = { visits: 'fa-map-marked-alt', booking: 'fa-file-signature', agreement: 'fa-file-contract', possession: 'fa-key', leads: 'fa-users' };
 
 describe('landing page', () => {
@@ -154,6 +170,31 @@ describe('CRM: lists, groups, agenda and privacy (read-only)', () => {
     await tab(p, 'Active'); assert.equal(await rows(p), 44);
     await tab(p, 'Inactive'); assert.equal(await rows(p), 10);
   });
+  test('Follow-up list: grouped Overdue, Today, Tomorrow, Later and sorted by the follow-up time, which is the time shown', async () => {
+    await tab(p, 'Follow-up');
+    const groups = await p.evaluate(() => {
+      const first = document.querySelector('div.sticky'); const out = []; let cur = null;
+      for (const el of [...first.parentElement.children]) {
+        if (el.classList.contains('sticky')) { cur = { name: el.innerText.split('\n')[0].trim(), rows: [] }; out.push(cur); }
+        else if (cur && el.getAttribute('role') === 'button') cur.rows.push(el.querySelector('span.shrink-0')?.innerText.trim() || '');
+      }
+      return out;
+    });
+    const mins = (l) => { const m = l.match(/(\d{1,2}):(\d{2}) (AM|PM)$/); assert.ok(m, `"${l}" shows a follow-up time`); return ((+m[1] % 12) + (m[3] === 'PM' ? 12 : 0)) * 60 + +m[2]; };
+    assert.deepEqual(groups.map((g) => g.name.replace(/ · follow-ups/, '')), ['Overdue', 'Today', 'Tomorrow', 'Later']);
+    for (const g of groups) assert.ok(g.rows.every((l) => /(AM|PM)$/.test(l)), `${g.name}: every row shows a follow-up time, not a last-message time (${g.rows})`);
+    for (const g of groups.filter((x) => /Today|Tomorrow/.test(x.name))) { const t = g.rows.map(mins); assert.deepEqual(t, [...t].sort((a, b) => a - b), `${g.name} is in time order (${g.rows})`); }
+    for (const g of groups.filter((x) => /Overdue|Later/.test(x.name))) assert.ok(g.rows.every((l) => /,/.test(l)), `${g.name} rows say which day (${g.rows})`);
+  });
+  test('Lead header shows project, channel, source, owner, lead ID and customer ID', async () => {
+    await tab(p, 'Active');
+    await p.locator('[role=button][tabindex="0"]').first().click(); await p.waitForTimeout(500);
+    const facts = await p.getByTestId('lead-facts').innerText();
+    assert.match(facts, /(The Grand Towers|Serene Gardens|Orchid Residency) · .+ › .+ · Owner \w+/);
+    const head = await p.locator('div.bg-\\[var\\(--medium-bg\\)\\].pl-3').first().innerText();
+    assert.match(head, /Lead ID LD-[0-9A-Z]{6}/); assert.match(head, /Customer ID CU-[0-9A-Z]{6}/);
+    assert.equal(/\d{5}\s?\d{5}/.test(head), false, 'no mobile number in the header');
+  });
   test('Visits / Booking / Agreement / Possession are all populated', async () => {
     await menu(p, MENU.visits);
     for (const [t, n] of [['Scheduled', 10], ['Pending', 10], ['Completed', 10]]) { await tab(p, t); assert.equal(await rows(p), n, `visits ${t}`); }
@@ -162,7 +203,8 @@ describe('CRM: lists, groups, agenda and privacy (read-only)', () => {
     await menu(p, MENU.agreement);
     for (const [t, n] of [['Drafted', 10], ['Signature', 10], ['ATS', 10], ['Registered', 22]]) { await tab(p, t); assert.equal(await rows(p), n, `agreement ${t}`); }
     await menu(p, MENU.possession);
-    for (const [t, n] of [['All', 52], ['Pending', 32], ['Scheduled', 10], ['Handed', 10]]) { await tab(p, t); assert.equal(await rows(p), n, `possession ${t}`); }
+    assert.equal(await p.locator('[role=tablist]').first().getByRole('tab').filter({ hasText: /^All/ }).count(), 0, 'no All sub-tab in Possession');
+    for (const [t, n] of [['Pending', 32], ['Scheduled', 10], ['Handed', 10]]) { await tab(p, t); assert.equal(await rows(p), n, `possession ${t}`); }
   });
   test('every tab shows its count, and it matches the list', async () => {
     for (const m of [MENU.leads, MENU.visits, MENU.booking, MENU.agreement, MENU.possession]) {
@@ -209,7 +251,7 @@ describe('CRM: lists, groups, agenda and privacy (read-only)', () => {
   });
   test('mobile numbers are never visible (lists, tabs, tooltips, links)', async () => {
     const leaks = []; const scan = async (where) => { const hits = await p.evaluate(() => { const re = /(\+91[\s\d-]{6,}|\b[6-9]\d{4}[ -]?\d{5}\b|\b\d{10}\b)/; const out = []; const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT); let n; while ((n = w.nextNode())) if (re.test(n.textContent) && n.parentElement?.offsetParent) out.push(n.textContent.trim().slice(0, 30)); document.querySelectorAll('input,textarea').forEach((i) => { if (i.offsetParent && re.test(i.value)) out.push('input'); }); document.querySelectorAll('[title],[aria-label],[placeholder]').forEach((e) => { for (const a of ['title', 'aria-label', 'placeholder']) if (re.test(e.getAttribute(a) || '')) out.push(a); }); return out; }); if (hits.length) leaks.push(`${where}: ${hits.join(',')}`); };
-    for (const [m, tabs] of [[MENU.leads, ['Follow-up', 'Active', 'Inactive']], [MENU.visits, ['Scheduled', 'Pending', 'Completed']], [MENU.booking, ['Token', 'Confirmed']], [MENU.agreement, ['Drafted', 'ATS']], [MENU.possession, ['All']]]) { await menu(p, m); for (const t of tabs) { await tab(p, t); await scan(`${m}/${t}`); } }
+    for (const [m, tabs] of [[MENU.leads, ['Follow-up', 'Active', 'Inactive']], [MENU.visits, ['Scheduled', 'Pending', 'Completed']], [MENU.booking, ['Token', 'Confirmed']], [MENU.agreement, ['Drafted', 'ATS']], [MENU.possession, ['Pending', 'Scheduled']]]) { await menu(p, m); for (const t of tabs) { await tab(p, t); await scan(`${m}/${t}`); } }
     await menu(p, MENU.leads); await p.locator('[role=button][tabindex="0"]').nth(2).click(); await p.waitForTimeout(400);
     for (const t of ['Activity', 'Timeline', 'Details', 'Booking', 'Files']) { await tab(p, t); await scan('lead/' + t); }
     assert.equal(await p.evaluate(() => !!document.querySelector('a[href^="tel:"], a[href*="wa.me"]')), false, 'no tel:/wa.me links (they show in the status bar)');
@@ -243,32 +285,127 @@ describe('CRM: forms and popups (these change data)', () => {
   const dlg = () => p.locator('[role=dialog]').last();
   const find = async (name) => (await apiLeads()).find((l) => l.name === name);
 
-  test('New lead: starts blank, validates inline, Esc closes, backdrop does not', async () => {
+  test('New lead is a 3-step wizard: starts blank, validates each step, Esc closes, backdrop does not', async () => {
     await p.getByRole('button', { name: 'New lead' }).click(); await p.waitForTimeout(300);
-    assert.equal(await p.evaluate(() => document.activeElement?.id), 'lm-first');
-    assert.equal(await p.evaluate(() => [...document.querySelectorAll('[role=dialog] select')].filter((s) => s.id !== 'lm-owner').every((s) => s.value === '')), true, 'nothing pre-selected');
-    await dlg().getByRole('button', { name: 'Create lead' }).click(); await p.waitForTimeout(250);
+    assert.equal(await p.evaluate(() => document.activeElement?.id), 'lm-project', 'Project comes first');
+    const steps = await p.locator('ol[aria-label="Lead steps"]').innerText();
+    for (const n of ['Contact', 'More details', 'First follow-up']) assert.match(steps, new RegExp(n));
+    assert.equal(await p.locator('[role=dialog] details').count(), 0, 'nothing is hidden behind a toggle');
+    await dlg().getByRole('button', { name: 'Next' }).click(); await p.waitForTimeout(250);
     assert.ok((await dlg().locator('[role=alert]').count()) >= 3);
     assert.equal(await p.evaluate(() => document.activeElement?.getAttribute('aria-invalid')), 'true', 'focus goes to the first problem');
+    const ids = await p.evaluate(() => [...document.querySelectorAll('[role=dialog] input, [role=dialog] select')].map((e) => e.id));
+    assert.deepEqual(ids.slice(0, 5), ['lm-project', 'lm-phone', 'lm-email', 'lm-first', 'lm-last'], 'order: Project, Mobile, Email, Name');
+    await p.fill('#lm-first', 'Step'); await p.fill('#lm-last', 'Check'); await p.fill('#lm-phone', '+91 90000 33344'); await p.fill('#lm-email', 'step.check@example.com');
+    assert.equal(await p.evaluate(() => [...document.querySelectorAll('[role=dialog] select')].every((s) => s.value === '')), true, 'nothing pre-selected');
+    assert.ok((await p.locator('#lm-project').count()) && (await p.locator('#lm-channel').count()) && (await p.locator('#lm-source').count()), 'Project, Channel and Source are on the Contact step');
+    await dlg().getByRole('button', { name: 'Next' }).click(); await p.waitForTimeout(250);
+    assert.ok((await dlg().locator('[role=alert]').count()) >= 3, 'Project, Channel and Source are required on step 1');
+    await p.selectOption('#lm-project', { index: 1 }); await p.selectOption('#lm-channel', { index: 1 }); await p.selectOption('#lm-source', { index: 1 });
+    await dlg().getByRole('button', { name: 'Next' }).click(); await p.waitForTimeout(250);
+    assert.equal(await p.locator('#lm-project').count(), 0, 'now on More details');
+    assert.equal(await p.evaluate(() => [...document.querySelectorAll('[role=dialog] select')].filter((s) => s.id !== 'lm-owner').every((s) => s.value === '')), true, 'nothing pre-selected');
+    const order = await p.evaluate(() => [...document.querySelectorAll('[role=dialog] select, [role=dialog] textarea')].map((e) => e.id));
+    assert.ok(order.indexOf('lm-budget') > -1 && order.indexOf('lm-owner') === order.indexOf('lm-budget') + 1, 'Owner comes right after Budget');
+    assert.ok(order.includes('lm-msg'), 'First remark is visible, not hidden');
+    assert.equal(await p.locator('#lm-partner').count(), 0, 'no separate Channel partner dropdown');
+    await dlg().getByRole('button', { name: 'Next' }).click(); await p.waitForTimeout(250);
+    assert.ok((await dlg().locator('[role=alert]').count()) >= 3, 'step 2 validates too');
+    await p.getByRole('button', { name: 'Back' }).click(); await p.waitForTimeout(200);
+    assert.equal(await p.inputValue('#lm-first'), 'Step', 'Back keeps what you typed');
     await p.mouse.click(5, 5); assert.equal(await p.locator('[role=dialog]').count(), 1, 'backdrop click keeps it open');
     await p.keyboard.press('Escape'); await p.waitForTimeout(200); assert.equal(await p.locator('[role=dialog]').count(), 0);
   });
-  test('New lead: creates the lead with its owner and first follow-up', async () => {
-    await p.getByRole('button', { name: 'New lead' }).click(); await p.waitForTimeout(300);
-    await p.fill('#lm-first', 'Test'); await p.fill('#lm-last', 'Lead'); await p.fill('#lm-phone', '+91 90000 11122'); await p.fill('#lm-email', 'test.lead@example.com');
-    await p.selectOption('#lm-project', { index: 1 }); await dlg().getByRole('button', { name: '2BHK', exact: true }).click(); await p.selectOption('#lm-loc', { index: 1 }); await p.selectOption('#lm-budget', { index: 1 });
-    await p.selectOption('#lm-channel', { index: 1 }); await p.selectOption('#lm-source', { index: 1 }); await p.selectOption('#lm-owner', { label: 'Priya Nair' });
-    await p.getByLabel('Schedule the first follow-up').check(); await dlg().getByRole('radio', { name: 'Tomorrow' }).click(); await p.fill('#lm-fu-time', '11:00');
-    await dlg().getByRole('button', { name: 'Create lead' }).click(); await p.waitForTimeout(1500);
+  test('New lead: a partner is picked as the Source, with a first remark and first follow-up', async () => {
+    await newLead(p, { first: 'Test', last: 'Lead', phone: '+91 90000 11122', email: 'test.lead@example.com', owner: 'Priya Nair', channel: 'Channel Partner', source: 'Elite Realty Brokers', remark: 'Wants an east facing flat', followUp: true });
     const lead = await find('Test Lead'); leadId = lead.id;
     assert.equal(lead.ownerId, 'user-3'); assert.ok(lead.tasks.some((t) => t.title.startsWith('Follow-up')));
+    assert.equal(lead.channelSource, 'Channel Partner'); assert.equal(lead.leadSource, 'Elite Realty Brokers'); assert.equal(lead.channelPartnerId, 'cp-1');
+    assert.match(lead.lastMessage, /east facing/);
     assert.equal((await p.innerText('body')).includes('90000 11122'), false, 'number is not shown');
+  });
+  test('New lead: warns about the same person in the same project, but only informs for another project; no override', async () => {
+    const open1 = async () => { await p.getByRole('button', { name: 'New lead' }).click(); await p.waitForTimeout(300); };
+    await open1();
+    await p.selectOption('#lm-project', { index: 1 }); await p.fill('#lm-phone', '90000 11122'); await p.waitForTimeout(300);
+    const warn = p.getByTestId('duplicate-warning');
+    assert.match(await warn.innerText(), /Already a lead in .*\s*Test (Lead|Renamed)/s);
+    assert.equal((await dlg().innerText()).includes('90000'), false, 'the number itself is not shown');
+    await p.fill('#lm-email', 'someone.else@example.com'); await p.fill('#lm-first', 'Dup'); await p.fill('#lm-last', 'Check'); await p.selectOption('#lm-channel', { index: 1 }); await p.selectOption('#lm-source', { index: 1 });
+    await dlg().getByRole('button', { name: 'Next' }).click(); await p.waitForTimeout(250);
+    assert.ok(await p.locator('#lm-project').isVisible(), 'blocked on the first step');
+    await p.selectOption('#lm-project', { index: 2 }); await p.waitForTimeout(300);
+    assert.equal(await p.getByTestId('duplicate-warning').count(), 0); assert.match(await p.getByTestId('duplicate-info').innerText(), /another project/i);
+    assert.match(await p.getByTestId('duplicate-info').innerText(), /Add a new lead for .*\s*Shift Test/s, 'both choices are offered');
+    await dlg().getByRole('button', { name: 'Next' }).click(); await p.waitForTimeout(250);
+    assert.ok(await p.locator('#lm-project').isVisible(), 'an answer is needed before going on');
+    assert.match(await p.getByTestId('duplicate-info').innerText(), /Choose what to do/);
+    await p.getByRole('radio', { name: /Add a new lead for/ }).check();
+    await dlg().getByRole('button', { name: 'Next' }).click(); await p.waitForTimeout(250);
+    assert.equal(await p.locator('#lm-project').count(), 0, 'adding a linked lead goes on');
+    await p.getByRole('button', { name: 'Back' }).click(); await p.waitForTimeout(200);
+    // Shift the existing lead instead (Admin has the Transfer permission).
+    const before = await find('Test Lead') || await find('Test Renamed');
+    await p.getByRole('radio', { name: /Shift Test/ }).check();
+    assert.ok(await dlg().getByRole('button', { name: 'Shift lead' }).isVisible(), 'the button says what it will do');
+    await dlg().getByRole('button', { name: 'Shift lead' }).click(); await p.waitForTimeout(1200);
+    assert.equal(await p.locator('[role=dialog]').count(), 0, 'the form closes');
+    let moved; for (let i = 0; i < 20; i++) { moved = (await apiLeads()).find((l) => l.id === before.id); if (moved.leadProject !== before.leadProject) break; await p.waitForTimeout(300); }
+    assert.notEqual(moved.leadProject, before.leadProject, 'the lead is now in the other project');
+    assert.equal(moved.customData.projectShifts.length, 1, 'the move is recorded');
+    await call('/leads/' + before.id, { method: 'PUT', host: hostFor(DEMO), token: await adminToken(), body: before }); await p.reload(); await p.waitForTimeout(2500);
+    await open1();
+    await p.selectOption('#lm-project', { index: 1 }); await p.fill('#lm-phone', '90000 11122'); await p.waitForTimeout(300);
+    assert.equal(await p.getByLabel(/add anyway/i).count(), 0, 'there is no way to override');
+    await p.fill('#lm-phone', '90000 55566'); await p.fill('#lm-email', 'a.different.person@example.com'); await p.waitForTimeout(300);
+    await p.fill('#lm-first', 'Other'); await p.fill('#lm-last', 'Person'); await p.selectOption('#lm-channel', { index: 1 }); await p.selectOption('#lm-source', { index: 1 });
+    assert.equal(await p.getByTestId('duplicate-warning').count(), 0, 'a different number clears it');
+    await dlg().getByRole('button', { name: 'Next' }).click(); await p.waitForTimeout(250);
+    assert.equal(await p.locator('#lm-project').count(), 0, 'then you can continue');
+    await p.keyboard.press('Escape'); await p.waitForTimeout(250);
+    await open1(); await p.selectOption('#lm-project', { index: 1 }); await p.fill('#lm-email', 'test.lead@example.com'); await p.waitForTimeout(300);
+    await p.getByRole('button', { name: 'Open lead' }).first().click(); await p.waitForTimeout(600);
+    assert.equal(await p.locator('[role=dialog]').count(), 0, 'the form closes');
+    assert.match(await p.locator('body').innerText(), /Test (Lead|Renamed)/);
+  });
+  test('New lead: a linked lead shares the customer id; Sales cannot shift without the Transfer permission', async () => {
+    const d = () => p.locator('[role=dialog]').last();
+    const startOther = async (page) => {
+      await page.getByRole('button', { name: 'New lead' }).click(); await page.waitForTimeout(300);
+      await page.selectOption('#lm-project', { index: 2 }); await page.fill('#lm-phone', '+91 90000 11122'); await page.waitForTimeout(300);
+    };
+    await startOther(p);
+    await p.getByRole('radio', { name: /Add a new lead for/ }).check(); await p.waitForTimeout(200);
+    assert.equal(await p.inputValue('#lm-first'), 'Test', 'the name is copied from the existing customer');
+    assert.equal(await p.inputValue('#lm-email'), 'test.lead@example.com', 'so is the email');
+    assert.equal(await p.inputValue('#lm-phone'), '+91 90000 11122', 'the mobile number stays what was typed');
+    assert.equal(await p.getByRole('radio', { name: /Add a new lead for/ }).isChecked(), true, 'filling the email does not reset the choice');
+    await p.fill('#lm-email', 'link.check@example.com'); await p.fill('#lm-first', 'Link'); await p.fill('#lm-last', 'Check'); await p.selectOption('#lm-channel', { index: 1 }); await p.selectOption('#lm-source', { index: 1 });
+    await p.getByRole('radio', { name: /Add a new lead for/ }).check();
+    await d().getByRole('button', { name: 'Next' }).click(); await p.waitForTimeout(250);
+    // The requirement (2BHK, location, budget) was copied from the existing customer, so there is nothing to pick again.
+    assert.equal(await d().getByRole('button', { name: '2BHK', exact: true }).getAttribute('aria-pressed'), 'true', 'the requirement is copied');
+    await d().getByRole('button', { name: 'Next' }).click(); await p.waitForTimeout(250);
+    await d().getByRole('button', { name: 'Create lead' }).click(); await p.waitForTimeout(1500);
+    const all = await apiLeads(); const linked = all.find((l) => l.name === 'Link Check'); const first = all.find((l) => l.id === leadId);
+    assert.ok(linked.customerId, 'the new lead has a customer id'); assert.equal(first.customerId, linked.customerId, 'the earlier lead shares it');
+    assert.notEqual(first.leadProject, linked.leadProject);
+    await call('/leads/' + linked.id, { method: 'DELETE', host: hostFor(DEMO), token: await adminToken() });
+    const s2 = await open(); await signIn(s2, COMPANY_URL, 'aarav', 'sss');
+    await startOther(s2);
+    const radio = s2.getByRole('radio', { name: /Shift Test/ });
+    assert.equal(await radio.isDisabled(), true, 'shifting is not offered');
+    assert.match(await s2.getByTestId('duplicate-info').innerText(), /don't have permission to transfer leads/i);
+    assert.equal(await s2.getByRole('radio', { name: /Add a new lead for/ }).isEnabled(), true, 'adding a linked lead still is');
+    await s2.context().close();
   });
   test('Edit lead: the saved number stays hidden and is kept', async () => {
     await p.getByText('Test Lead').first().click(); await p.waitForTimeout(400);
     await p.getByRole('button', { name: 'Edit lead' }).click(); await p.waitForTimeout(300);
     assert.equal(await p.inputValue('#lm-phone'), '');
-    await p.fill('#lm-last', 'Renamed'); await dlg().getByRole('button', { name: 'Save changes' }).click(); await p.waitForTimeout(1200);
+    await p.fill('#lm-last', 'Renamed'); await dlg().getByRole('button', { name: 'Next' }).click(); await p.waitForTimeout(250);
+    assert.equal(await p.locator('#lm-owner').inputValue(), 'user-3', 'owner is editable and shows the current one');
+    await dlg().getByRole('button', { name: 'Save changes' }).click(); await p.waitForTimeout(1200);
     const lead = await find('Test Renamed'); assert.equal(lead.phone, '+91 90000 11122');
   });
   test('Follow-up: quick dates, owner defaults to you, validates, saves', async () => {
@@ -576,13 +713,8 @@ describe('Operations: lead transfer, lead merge and distribution rules', () => {
     await p.selectOption('#try-project', { label: 'The Grand Towers' }); await p.waitForTimeout(200);
     assert.match(await p.getByText(/Next lead goes to/).innerText(), /Next lead goes to Aarav Deshmukh/);
     await p.getByRole('button', { name: 'Main App' }).click(); await p.waitForTimeout(700);
-    for (const [first, owner] of [['Qa Rr One', 'user-2'], ['Qa Rr Two', 'user-3']]) {
-      await p.getByRole('button', { name: 'New lead' }).click(); await p.waitForTimeout(300);
-      assert.equal(await p.locator('#lm-owner').inputValue(), '', 'owner starts on Auto-assign');
-      await p.fill('#lm-first', first); await p.fill('#lm-last', 'Lead'); await p.fill('#lm-phone', '+91 90000 22233'); await p.fill('#lm-email', first.replace(/ /g, '').toLowerCase() + '@qa.test');
-      await p.selectOption('#lm-project', { label: 'The Grand Towers' }); await p.locator('[role=dialog]').last().getByRole('button', { name: '2BHK', exact: true }).click();
-      await p.selectOption('#lm-loc', { index: 1 }); await p.selectOption('#lm-budget', { index: 1 }); await p.selectOption('#lm-channel', { index: 1 }); await p.selectOption('#lm-source', { index: 1 });
-      await p.locator('[role=dialog]').last().getByRole('button', { name: 'Create lead' }).click(); await p.waitForTimeout(1500);
+    for (const [first, owner, phone] of [['Qa Rr One', 'user-2', '+91 90000 22201'], ['Qa Rr Two', 'user-3', '+91 90000 22202']]) { // different numbers: the page still remembers the lead deleted behind its back
+      await newLead(p, { first, last: 'Lead', phone, email: first.replace(/ /g, '').toLowerCase() + '@qa.test', project: 'The Grand Towers' });
       const made = (await call('/leads', { host: H, token: await adminToken() })).body.find((l) => l.name === first + ' Lead');
       assert.equal(made.ownerId, owner, first);
       await call('/leads/' + made.id, { method: 'DELETE', host: H, token: await adminToken() });

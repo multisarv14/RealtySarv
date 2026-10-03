@@ -67,3 +67,34 @@ export const phoneForTel = (phone: string): string => (phone || '').replace(/[^\
 export const callNumber = (phone: string): void => { window.location.href = `tel:${phoneForTel(phone)}`; };
 /** Open WhatsApp chat with the number, again without exposing it in a link. */
 export const openWhatsApp = (phone: string): void => { window.open(`https://wa.me/${phoneForWhatsApp(phone)}`, '_blank', 'noopener,noreferrer'); };
+
+/** Leads that already use this mobile number (last 10 digits) or email. Numbers are compared, never shown. */
+export function findLeadMatches<T extends { id: string; phone: string; email: string }>(leads: T[], q: { phone?: string; email?: string; excludeId?: string }): T[] {
+  const digits = (q.phone || '').replace(/\D/g, '').slice(-10);
+  const email = (q.email || '').trim().toLowerCase();
+  const byPhone = digits.length >= 10;
+  const byEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  if (!byPhone && !byEmail) return [];
+  return leads.filter(l => l.id !== q.excludeId && ((byPhone && (l.phone || '').replace(/\D/g, '').slice(-10) === digits) || (byEmail && (l.email || '').trim().toLowerCase() === email)));
+}
+
+/** "11:00" or "9:30" to "11:00 AM" / "9:30 AM". */
+export function time12(hhmm?: string): string {
+  const m = (hhmm || '').match(/^(\d{1,2}):(\d{2})/);
+  if (!m) return '';
+  const h = Number(m[1]);
+  return `${h % 12 || 12}:${m[2]} ${h >= 12 ? 'PM' : 'AM'}`;
+}
+
+/** The pending follow-up that is due first, by date and then time of day. */
+export function nextFollowUp(lead: Lead): { date: string; time: string } | undefined {
+  const due = (lead.tasks || [])
+    .filter(t => t.status === 'Pending' && t.title.startsWith('Follow-up:') && t.dueDate)
+    .map(t => ({ date: t.dueDate, time: (t.description || '').match(/Scheduled for (\d{1,2}:\d{2})/)?.[1] || '' }));
+  return due.sort((a, b) => (a.date + 'T' + (a.time || '23:59').padStart(5, '0')).localeCompare(b.date + 'T' + (b.time || '23:59').padStart(5, '0')))[0];
+}
+
+/** Short, stable codes for people to quote: LD- for the lead, CU- for the customer (linked leads share a CU code). */
+const code = (s: string) => { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0; return h.toString(36).toUpperCase().padStart(6, '0').slice(-6); };
+export const leadCode = (lead: Lead): string => 'LD-' + code(lead.id);
+export const customerCode = (lead: Lead): string => 'CU-' + code(lead.customerId || lead.id);

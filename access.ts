@@ -11,6 +11,7 @@ export const ACCESS_ITEMS: AccessItem[] = [
   { key: 'Possession', label: 'Possession', group: 'LeadSarv screens' },
   { key: 'ProjectSarv', label: 'ProjectSarv', group: 'Other modules', hint: 'Needs the Ultimate Stack plan' },
   { key: 'FinanceSarv', label: 'FinanceSarv', group: 'Other modules', hint: 'Needs the Ultimate Stack plan' },
+  { key: 'Transfer', label: 'Transfer leads', group: 'Control', hint: 'Move a lead to another project' },
   { key: 'Admin', label: 'Admin settings', group: 'Control' },
 ];
 
@@ -20,8 +21,8 @@ export const roleSettingId = (role: string) => `role-${role}`;
 const ALL = ACCESS_ITEMS.map(i => i.key);
 const DEFAULT_ACCESS: Record<string, string[]> = {
   Admin: ALL,
-  Sales: ALL.filter(k => k !== 'Admin'),
-  User: ALL.filter(k => k !== 'Admin'),
+  Sales: ALL.filter(k => k !== 'Admin' && k !== 'Transfer'),
+  User: ALL.filter(k => k !== 'Admin' && k !== 'Transfer'),
 };
 
 /** The screens a role can open. Admin is never restricted. */

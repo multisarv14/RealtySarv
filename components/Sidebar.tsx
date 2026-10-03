@@ -3,7 +3,7 @@ import React from 'react';
 import { Lead, LeadStatus, SiteVisit, Task, SiteVisitStatus, User, ActiveLeadTab, AgreementStatus, PossessionStatus, LifecycleStage, LeadLifecycleStatus } from '../types';
 import ChatItem from './ChatItem';
 import VisitItem from './VisitItem';
-import { friendlyDate, todayISO, urgencyClass } from './leadUi';
+import { friendlyDate, nextFollowUp, time12, todayISO, urgencyClass } from './leadUi';
 
 // Thin sticky section header used by every list (visits by day, follow-ups by due date, others by added date or project).
 const GroupHeader: React.FC<{ label: string; sub?: string; count: number; tone?: 'danger' | 'normal' }> = ({ label, sub, count, tone = 'normal' }) => (
@@ -50,7 +50,7 @@ const leadTabs: ActiveLeadTab[] = ['Follow-up', 'Active', 'Inactive'];
 const visitTabs: ActiveVisitTab[] = ['Scheduled', 'Pending', 'Completed'];
 const bookingTabs: ActiveBookingTab[] = ['Token Booking', 'Confirmed Booking'];
 const agreementTabs: AgreementStatus[] = ['Drafted', 'Signature', 'ATS', 'Registered'];
-const possessionTabs: (PossessionStatus | 'All')[] = ['All', 'Pending', 'Scheduled', 'Handed Over'];
+const possessionTabs: PossessionStatus[] = ['Pending', 'Scheduled', 'Handed Over'];
 
 const Sidebar: React.FC<SidebarProps> = ({
   leads,
@@ -94,7 +94,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   const [activeVisitTab, setActiveVisitTab] = React.useState<ActiveVisitTab>('Scheduled');
   const [activeBookingTab, setActiveBookingTab] = React.useState<ActiveBookingTab>('Token Booking');
   const [activeAgreementTab, setActiveAgreementTab] = React.useState<AgreementStatus>('Drafted');
-  const [activePossessionTab, setActivePossessionTab] = React.useState<PossessionStatus | 'All'>('All');
+  const [activePossessionTab, setActivePossessionTab] = React.useState<PossessionStatus>('Pending');
 
   const allMenuItems: { id: ActiveMenu; label: string; icon: string }[] = [
     { id: 'Leads', label: 'Leads', icon: 'fas fa-users' },
@@ -161,8 +161,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             menuFilteredLeads = bookedLeads.filter(lead => lead.agreementStatus === activeAgreementTab);
             break;
         case 'Possession':
-            menuFilteredLeads = bookedLeads;
-            if (activePossessionTab !== 'All') menuFilteredLeads = menuFilteredLeads.filter(lead => lead.possessionStatus === activePossessionTab);
+            menuFilteredLeads = bookedLeads.filter(lead => lead.possessionStatus === activePossessionTab);
             break;
         default: menuFilteredLeads = safeLeads;
     }
@@ -207,7 +206,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       },
       Booking: { 'Token Booking': safeLeads.filter(l => isToken(l) && !isBooked(l)).length, 'Confirmed Booking': booked.length },
       Agreement: Object.fromEntries((['Drafted', 'Signature', 'ATS', 'Registered'] as const).map(st => [st, booked.filter(l => l.agreementStatus === st).length])),
-      Possession: { 'All': booked.length, 'Pending': booked.filter(l => l.possessionStatus === 'Pending').length, 'Scheduled': booked.filter(l => l.possessionStatus === 'Scheduled').length, 'Handed Over': booked.filter(l => l.possessionStatus === 'Handed Over').length },
+      Possession: { 'Pending': booked.filter(l => l.possessionStatus === 'Pending').length, 'Scheduled': booked.filter(l => l.possessionStatus === 'Scheduled').length, 'Handed Over': booked.filter(l => l.possessionStatus === 'Handed Over').length },
     } as Record<string, Record<string, number>>;
   }, [safeLeads]);
 
@@ -224,23 +223,34 @@ const Sidebar: React.FC<SidebarProps> = ({
                 if (activeVisitTab === 'Completed') return visit.status === 'Completed';
                 return false;
             }).map(visit => ({ visit, lead }))
-    ).sort((a, b) => (activeVisitTab === 'Completed' ? -1 : 1) * (new Date(a.visit.date).getTime() - new Date(b.visit.date).getTime()));
+    ).sort((a, b) => (activeVisitTab === 'Completed' ? -1 : 1) * (`${a.visit.date}T${(a.visit.time || '00:00').padStart(5, '0')}`).localeCompare(`${b.visit.date}T${(b.visit.time || '00:00').padStart(5, '0')}`));
   }, [filteredLeads, activeVisitTab, activeMenu]);
   
+  // In the Follow-up list the right-hand time is when the follow-up is due (not when the last message arrived).
+  const followUpLabel = (l: Lead, groupKey: string): string => {
+    const nf = nextFollowUp(l);
+    if (!nf) return '';
+    const t = time12(nf.time);
+    return groupKey === 'today' || groupKey === 'tomorrow' ? t : [friendlyDate(nf.date), t].filter(Boolean).join(', ');
+  };
+
   // Section the lead list so it reads like the Visits list.
   const leadGroups = React.useMemo(() => {
     if (activeMenu === 'Visits') return [] as { key: string; label: string; sub?: string; tone?: 'danger' | 'normal'; leads: Lead[] }[];
     const today = todayISO();
     const dayDiff = (iso: string) => Math.round((new Date(today + 'T00:00:00').getTime() - new Date(iso + 'T00:00:00').getTime()) / 86400000);
-    const nextFollowUp = (l: Lead) => (l.tasks || []).filter(t => t.status === 'Pending' && t.title.startsWith('Follow-up:') && t.dueDate).map(t => t.dueDate).sort()[0];
+    const nextDue = (l: Lead) => nextFollowUp(l);
     type G = { key: string; label: string; sub?: string; tone?: 'danger' | 'normal'; order: number; sort: string };
     const groupOf = (l: Lead): G => {
       if (activeMenu === 'Leads' && activeLeadTab === 'Follow-up') {
-        const due = nextFollowUp(l) || '9999-12-31';
-        if (due < today) return { key: 'overdue', label: 'Overdue', tone: 'danger', order: 0, sort: due };
-        if (due === today) return { key: 'today', label: 'Today', sub: 'follow-ups', order: 1, sort: due };
-        if (dayDiff(due) === -1) return { key: 'tomorrow', label: 'Tomorrow', order: 2, sort: due };
-        return { key: 'later', label: 'Later', order: 3, sort: due };
+        const nf = nextDue(l);
+        const due = nf?.date || '9999-12-31';
+        // Earliest first inside each group: by date, then by the time of day of the follow-up.
+        const sort = due + 'T' + (nf?.time || '23:59').padStart(5, '0');
+        if (due < today) return { key: 'overdue', label: 'Overdue', tone: 'danger', order: 0, sort };
+        if (due === today) return { key: 'today', label: 'Today', sub: 'follow-ups', order: 1, sort };
+        if (dayDiff(due) === -1) return { key: 'tomorrow', label: 'Tomorrow', order: 2, sort };
+        return { key: 'later', label: 'Later', order: 3, sort };
       }
       if (activeMenu === 'Leads') {
         const d = dayDiff(l.leadDate || today);
@@ -419,7 +429,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Sub-tabs */}
-      <div role="tablist" className="flex bg-[var(--dark-bg)] border-b border-[var(--border-color)] flex-shrink-0 overflow-x-auto no-scrollbar">
+      <div role="tablist" className="flex gap-1.5 px-2.5 py-2 bg-[var(--dark-bg)] border-b border-[var(--border-color)] flex-shrink-0 overflow-x-auto no-scrollbar">
           {(activeMenu === 'Leads' ? leadTabs : activeMenu === 'Visits' ? visitTabs : activeMenu === 'Booking' ? bookingTabs : activeMenu === 'Agreement' ? agreementTabs : possessionTabs).map(tab => {
             const current = (activeMenu === 'Leads' ? activeLeadTab : activeMenu === 'Visits' ? activeVisitTab : activeMenu === 'Booking' ? activeBookingTab : activeMenu === 'Agreement' ? activeAgreementTab : activePossessionTab);
             const active = current === tab;
@@ -431,9 +441,9 @@ const Sidebar: React.FC<SidebarProps> = ({
                   else if(activeMenu === 'Booking') setActiveBookingTab(tab as any);
                   else if(activeMenu === 'Agreement') setActiveAgreementTab(tab as any);
                   else setActivePossessionTab(tab as any);
-              }} className={`flex-1 whitespace-nowrap px-3 py-2 text-[11px] font-semibold transition-colors border-b-2 ${active ? 'text-[var(--primary-color)] border-[var(--primary-color)]' : 'text-[var(--text-secondary)] border-transparent hover:text-[var(--text-primary)]'}`}>
+              }} className={`flex-1 whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${active ? 'bg-[var(--primary-color)] text-white shadow-sm' : 'text-[var(--text-secondary)] bg-[var(--medium-bg)] hover:text-[var(--text-primary)] hover:bg-[var(--light-bg)]'}`}>
                 {tab}
-                <span className={`ml-1.5 px-1.5 rounded-full text-[10px] ${active ? 'bg-[var(--primary-color)]/15' : 'bg-[var(--light-bg)]'}`}>{tabCounts[activeMenu]?.[tab as string] ?? 0}</span>
+                <span className={`ml-1.5 px-1.5 rounded-full text-[10px] ${active ? 'bg-white/25 text-white' : 'bg-[var(--light-bg)]'}`}>{tabCounts[activeMenu]?.[tab as string] ?? 0}</span>
               </button>
             );
           })}
@@ -463,6 +473,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                     onOpenAtsLineup={onOpenAtsLineup}
                     onOpenRegDetails={onOpenRegDetails}
                     onOpenExecutionDetails={onOpenExecutionDetails}
+                    timeLabel={activeMenu === 'Leads' && activeLeadTab === 'Follow-up' ? followUpLabel(lead, group.key) : undefined}
                   />
                   ))}
                 </React.Fragment>

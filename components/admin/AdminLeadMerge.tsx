@@ -21,12 +21,17 @@ export function findDuplicateGroups(leads: Lead[]): Group[] {
   const find = (x: string): string => { while (parent.get(x) !== x) { parent.set(x, parent.get(parent.get(x)!)!); x = parent.get(x)!; } return x; };
   const union = (a: string, b: string) => { parent.set(find(a), find(b)); };
   leads.forEach(l => parent.set(l.id, l.id));
+  const byId = new Map(leads.map(l => [l.id, l]));
   const seen = new Map<string, string>();
   const why = new Map<string, Set<string>>();
   for (const l of leads) {
     const phone = digits(l.phone); const email = norm(l.email);
     for (const [kind, v] of [['mobile', phone.length >= 10 ? 'p:' + phone : ''], ['email', email ? 'e:' + email : '']]) {
       if (!v) continue;
+      const other = seen.has(v) ? byId.get(seen.get(v)!) : undefined;
+      // The same customer in two projects (linked by customer id) is intended, not a duplicate.
+      const linked = !!other && !!l.customerId && l.customerId === other.customerId && l.leadProject !== other.leadProject;
+      if (seen.has(v) && linked) continue;
       if (seen.has(v)) { union(l.id, seen.get(v)!); (why.get(find(l.id)) || why.set(find(l.id), new Set()).get(find(l.id))!).add(kind); } else seen.set(v, l.id);
     }
   }

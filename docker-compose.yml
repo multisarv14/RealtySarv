@@ -3,5 +3,8 @@ services:
     image: mongo:7
     ports: ["27017:27017"]
     volumes: ["mongo-data:/data/db"]
+    # Each company database is ~45 collections (hundreds of files); the default 1024 limit crashes MongoDB when many tenants exist.
+    ulimits:
+      nofile: { soft: 65536, hard: 65536 }
 volumes:
   mongo-data:

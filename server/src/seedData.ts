@@ -70,6 +70,8 @@ export async function seedTenant(models: TenantModels, opts: { demo: boolean }):
         d.email = d.email?.toLowerCase();
         if (password) d.passwordHash = await bcrypt.hash(String(password), 10);
       }
+      // The demo company is already set up: open straight into the CRM instead of the install wizard.
+      if (name === 'companyProfile' && opts.demo) d.setupCompleted = true;
       docs.push(d);
     }
     if (docs.length) await models[name].insertMany(docs);

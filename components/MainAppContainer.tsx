@@ -160,6 +160,21 @@ const MainAppContainer: React.FC<MainAppContainerProps> = ({
     setLeadToEdit(null);
   }, []);
 
+  const canTransfer = !allowedMenus || allowedMenus.includes('Transfer');
+
+  // Move an existing lead to another project (needs the Transfer permission; a booked lead stays where its unit is).
+  const handleShiftLead = React.useCallback((leadId: string, project: string) => {
+    const lead = leads.find(l => l.id === leadId);
+    if (!lead) return;
+    if (!canTransfer) { toast.error("You don't have permission to transfer leads."); return; }
+    if (lead.bookingDetails) { toast.error('This lead has a booking, so it cannot be moved to another project.'); return; }
+    const entry = { at: new Date().toISOString(), from: lead.leadProject, to: project, by: currentUser?.id };
+    onLeadsUpdate(leads.map(l => l.id === leadId ? { ...l, read: true, leadProject: project, customData: { ...(l.customData || {}), projectShifts: [...((l.customData?.projectShifts as unknown[]) || []), entry] } } : l));
+    toast.success(`${lead.name} shifted from ${lead.leadProject} to ${project}.`);
+    // Select it without a second save: a second write built from the old list would put the old project back.
+    setSelectedLeadId(leadId); setIsMainContentVisible(true); setActiveContentTab('chat');
+  }, [leads, onLeadsUpdate, canTransfer, currentUser]);
+
   const handleAddLead = React.useCallback((leadData: NewLeadData) => {
     const leadId = uuidv4();
     // No owner chosen: let the distribution rules decide, else the person adding it.
@@ -206,6 +221,7 @@ const MainAppContainer: React.FC<MainAppContainerProps> = ({
       channelSource: leadData.channelSource,
       leadSource: leadData.sourceName,
       ...(leadData.channelPartnerId ? { channelPartnerId: leadData.channelPartnerId } : {}),
+      ...(leadData.customerId ? { customerId: leadData.customerId } : {}),
       propertyImages: [],
       ownerId,
       leadProject: leadData.leadProject || 'Not Assigned',
@@ -215,7 +231,9 @@ const MainAppContainer: React.FC<MainAppContainerProps> = ({
       possessionStatus: 'Pending',
       customData: {},
     };
-    onLeadsUpdate([...leads, newLead]);
+    // Same customer in another project: link the earlier lead(s) to the same customer id.
+    const link = new Set(leadData.linkLeadIds || []);
+    onLeadsUpdate([...leads.map(l => (link.has(l.id) && leadData.customerId ? { ...l, customerId: leadData.customerId } : l)), newLead]);
   }, [leads, onLeadsUpdate, users, currentUser, distributionRules, onSaveDistributionRule]);
 
   const handleUpdateLead = React.useCallback((updatedLeadData: Lead) => {
@@ -421,7 +439,7 @@ const MainAppContainer: React.FC<MainAppContainerProps> = ({
       </div>
 
       <Toaster />
-      <LeadModal isOpen={showLeadModal} onClose={handleCloseLeadModal} onAddLead={handleAddLead} onUpdateLead={handleUpdateLead} leadToEdit={leadToEdit} unitTypes={unitTypes} locationSettings={locationSettings} sources={sources} budgets={budgets} clientProfiles={clientProfiles} livingPlaces={livingPlaces} projects={projects} channelPartners={channelPartners} autoAssign={(distributionRules || []).some(r => r.enabled)} formConfigs={formConfigs} users={users} currentUserId={currentUser?.id} />
+      <LeadModal isOpen={showLeadModal} onClose={handleCloseLeadModal} onAddLead={handleAddLead} onUpdateLead={handleUpdateLead} leadToEdit={leadToEdit} unitTypes={unitTypes} locationSettings={locationSettings} sources={sources} budgets={budgets} clientProfiles={clientProfiles} livingPlaces={livingPlaces} projects={projects} channelPartners={channelPartners} leads={leads} onOpenLead={handleSelectLead} canTransfer={canTransfer} onShiftLead={handleShiftLead} autoAssign={(distributionRules || []).some(r => r.enabled)} formConfigs={formConfigs} users={users} currentUserId={currentUser?.id} />
       <SiteVisitModal
         isOpen={showSiteVisitModal}
         onClose={() => setShowSiteVisitModal(false)}
