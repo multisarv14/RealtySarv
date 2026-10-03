@@ -104,7 +104,7 @@ export function fillInventory(project: Project, types: string[], floors: number,
 export function buildDemoLeads(ctx: DemoContext): Lead[] {
   // Units for every project (done first so booked leads can pick real ones)
   const byName = new Map(ctx.projects.map((pr) => [pr.name, pr]));
-  const layout: Record<string, [string[], number, number]> = { 'The Grand Towers': [['2BHK', '3BHK'], 8, 3], 'Serene Gardens': [['Villa', '2BHK'], 4, 3], 'Orchid Residency': [['1BHK', '2BHK'], 8, 3] };
+  const layout: Record<string, [string[], number, number]> = { 'The Grand Towers': [['2BHK', '3BHK'], 8, 5], 'Serene Gardens': [['Villa', '2BHK'], 6, 8], 'Orchid Residency': [['1BHK', '2BHK'], 6, 4] };
   for (const pr of ctx.projects) { const [types, floors, per] = layout[pr.name] ?? [['2BHK'], 5, 2]; fillInventory(pr, types, floors, per); }
   const takeUnit = (projectName: string, interest: string) => {
     const pr = byName.get(projectName);
@@ -144,55 +144,61 @@ export function buildDemoLeads(ctx: DemoContext): Lead[] {
       doneFu: status === 'Qualified' ? [{ offset: -2 - i, note: 'Discussed requirement, shortlisted two options' }] : [],
     }));
 
-  // ---- Leads > Inactive (6)
-  for (let i = 0; i < 6; i++) specs.push({ bucket: 'inactive', status: 'Unqualified', ageDays: 20 + i * 4, notes: [['Budget is far below the available inventory', 'Not interested in under-construction projects', 'Bought elsewhere', 'Looking for rental, not purchase', 'Number not reachable after 4 attempts', 'Wants a different city'][i]] });
+  // Every list below holds at least 10 records, so each tab looks "lived in" and scrolls.
 
-  // ---- Visits > Scheduled (8): today, tomorrow and later
-  [[0, '11:00'], [0, '16:00'], [1, '10:30'], [1, '15:30'], [2, '12:00'], [3, '11:30'], [4, '17:00'], [6, '10:00']].forEach(([offset, time], i) => specs.push({
+  // ---- Leads > Inactive (10)
+  const lostReasons = ['Budget is far below the available inventory', 'Not interested in under-construction projects', 'Bought elsewhere', 'Looking for rental, not purchase', 'Number not reachable after 4 attempts', 'Wants a different city',
+    'Possession date is too far away', 'Decided to wait for lower interest rates', 'Only wanted a price comparison', 'Family postponed the purchase'];
+  lostReasons.forEach((reason, i) => specs.push({ bucket: 'inactive', status: 'Unqualified', ageDays: 20 + i * 3, notes: [reason] }));
+
+  // ---- Visits > Scheduled (10): today, tomorrow and later
+  [[0, '11:00'], [0, '16:00'], [1, '10:30'], [1, '15:30'], [2, '12:00'], [3, '11:30'], [4, '17:00'], [5, '10:00'], [6, '14:30'], [7, '12:30']].forEach(([offset, time], i) => specs.push({
     bucket: 'visitScheduled', status: 'Qualified', ageDays: 5 + i, visit: { offset: offset as number, time: time as string, status: 'Visit Scheduled', note: i % 2 ? 'Coming with family, 4 people' : 'Wants to see the sample flat and amenities' },
   }));
 
-  // ---- Visits > Pending (4): date passed, still marked scheduled
-  [-1, -2, -3, -5].forEach((offset, i) => specs.push({
-    bucket: 'visitPending', status: 'Qualified', ageDays: 8 + i * 2, visit: { offset, time: clock(11 + i, 0), status: 'Visit Scheduled', note: 'Outcome not updated after the visit' },
+  // ---- Visits > Pending (10): date passed, still marked scheduled
+  Array.from({ length: 10 }, (_, i) => -(i + 1)).forEach((offset, i) => specs.push({
+    bucket: 'visitPending', status: 'Qualified', ageDays: 8 + i * 2, visit: { offset, time: clock(10 + (i % 7), i % 2 ? 30 : 0), status: 'Visit Scheduled', note: 'Outcome not updated after the visit' },
   }));
 
-  // ---- Visits > Completed (6)
-  [-1, -2, -3, -4, -6, -9].forEach((offset, i) => specs.push({
-    bucket: 'visitDone', status: 'Qualified', ageDays: 12 + i * 2, visit: { offset, time: clock(10 + i, 30), status: 'Completed', note: 'Liked the layout; asked about possession timeline' },
-    fu: i < 3 ? [{ offset: i - 1, type: 'Call', time: '12:00', note: 'Ask for booking decision after the visit' }] : [], notes: ['Visited with spouse. Interested in higher floors.'],
+  // ---- Visits > Completed (10)
+  Array.from({ length: 10 }, (_, i) => -(i + 1)).forEach((offset, i) => specs.push({
+    bucket: 'visitDone', status: 'Qualified', ageDays: 12 + i * 2, visit: { offset, time: clock(10 + (i % 7), 30), status: 'Completed', note: 'Liked the layout; asked about possession timeline' },
+    fu: i < 4 ? [{ offset: i - 1, type: 'Call', time: '12:00', note: 'Ask for booking decision after the visit' }] : [], notes: ['Visited with spouse. Interested in higher floors.'],
   }));
 
-  // ---- Booking > Token (7)
-  [51000, 75000, 101000, 51000, 125000, 151000, 201000].forEach((token, i) => specs.push({
+  // ---- Booking > Token (10)
+  [51000, 75000, 101000, 51000, 125000, 151000, 201000, 61000, 90000, 110000].forEach((token, i) => specs.push({
     bucket: 'token', status: 'Qualified', ageDays: 10 + i * 2, token, visit: { offset: -(4 + i), time: '11:00', status: 'Completed' },
-    fu: i < 3 ? [{ offset: i - 1, type: 'Call', time: '13:00', note: 'Collect KYC documents for booking confirmation' }] : [],
+    fu: i < 4 ? [{ offset: i - 1, type: 'Call', time: '13:00', note: 'Collect KYC documents for booking confirmation' }] : [],
   }));
 
-  // ---- Booking > Confirmed (12) across the four agreement stages, then 6 older registered units
-  const booked: BookedSpec[] = [
+  // ---- Booking > Confirmed: every agreement stage, each with 10+ records and a mix of "what to do next"
+  const pay = (i: number) => (i % 4);
+  const drafted: BookedSpec[] = Array.from({ length: 10 }, (_, i) => [
     { agreement: 'Drafted', possession: 'Pending', kyc: 0, receipts: 0 },
     { agreement: 'Drafted', possession: 'Pending', kyc: 4, receipts: 0 },
     { agreement: 'Drafted', possession: 'Pending', kyc: 6, draftGenerated: true, receipts: 1, demand: true },
+  ][i % 3] as BookedSpec);
+  const signature: BookedSpec[] = Array.from({ length: 10 }, (_, i) => [
     { agreement: 'Signature', possession: 'Pending', kyc: 6, draftGenerated: true, signedDraft: 'Pending', receipts: 1 },
     { agreement: 'Signature', possession: 'Pending', kyc: 6, draftGenerated: true, signedDraft: 'Verified', receipts: 1, demand: true },
     { agreement: 'Signature', possession: 'Pending', kyc: 5, draftGenerated: true, signedDraft: 'Pending', receipts: 0 },
+  ][i % 3] as BookedSpec);
+  const ats: BookedSpec[] = Array.from({ length: 10 }, (_, i) => [
     { agreement: 'ATS', possession: 'Pending', kyc: 6, draftGenerated: true, signedDraft: 'Verified', challan: 'Pending', receipts: 2 },
     { agreement: 'ATS', possession: 'Pending', kyc: 6, draftGenerated: true, signedDraft: 'Verified', challan: 'Verified', receipts: 2, demand: true },
-    { agreement: 'ATS', possession: 'Pending', kyc: 6, draftGenerated: true, signedDraft: 'Verified', challan: 'Verified', lineup: { office: 'Sub-Registrar Office, Haveli 4', offset: 0, time: '11:30' }, receipts: 2 },
-    { agreement: 'Registered', possession: 'Pending', kyc: 6, signedDraft: 'Verified', challan: 'Verified', registered: true, executed: true, receipts: 3, demand: true },
-    { agreement: 'Registered', possession: 'Scheduled', kyc: 6, signedDraft: 'Verified', challan: 'Verified', registered: true, executed: true, receipts: 4 },
-    { agreement: 'Registered', possession: 'Handed Over', kyc: 6, signedDraft: 'Verified', challan: 'Verified', registered: true, executed: true, receipts: 5 },
-    { agreement: 'Registered', possession: 'Pending', kyc: 6, signedDraft: 'Verified', challan: 'Verified', registered: true, executed: true, receipts: 4 },
-    { agreement: 'Registered', possession: 'Pending', kyc: 6, signedDraft: 'Verified', challan: 'Verified', registered: true, executed: true, receipts: 3 },
-    { agreement: 'Registered', possession: 'Scheduled', kyc: 6, signedDraft: 'Verified', challan: 'Verified', registered: true, executed: true, receipts: 5 },
-    { agreement: 'Registered', possession: 'Scheduled', kyc: 6, signedDraft: 'Verified', challan: 'Verified', registered: true, executed: true, receipts: 5 },
-    { agreement: 'Registered', possession: 'Handed Over', kyc: 6, signedDraft: 'Verified', challan: 'Verified', registered: true, executed: true, receipts: 6 },
-    { agreement: 'Registered', possession: 'Handed Over', kyc: 6, signedDraft: 'Verified', challan: 'Verified', registered: true, executed: true, receipts: 6 },
+    { agreement: 'ATS', possession: 'Pending', kyc: 6, draftGenerated: true, signedDraft: 'Verified', challan: 'Verified', lineup: { office: 'Sub-Registrar Office, Haveli 4', offset: [0, 1, 2, -1][i % 4], time: '11:30' }, receipts: 2 },
+  ][i % 3] as BookedSpec);
+  const regBase: Omit<BookedSpec, 'possession' | 'receipts'> = { agreement: 'Registered', kyc: 6, signedDraft: 'Verified', challan: 'Verified', registered: true, executed: true };
+  const registered: BookedSpec[] = [
+    ...Array.from({ length: 2 }, (_, i): BookedSpec => ({ ...regBase, possession: 'Pending', receipts: 3 + i, demand: i === 0 })),
+    ...Array.from({ length: 10 }, (_, i): BookedSpec => ({ ...regBase, possession: 'Scheduled', receipts: 4 + (i % 2) })),
+    ...Array.from({ length: 10 }, (_, i): BookedSpec => ({ ...regBase, possession: 'Handed Over', receipts: 5 + (i % 2) })),
   ];
-  booked.forEach((b, i) => specs.push({
-    bucket: 'booked', status: 'Converted', ageDays: 25 + i * 6, token: 101000 + (i % 4) * 25000, booking: b,
-    fu: i === 1 || i === 7 || i === 10 ? [{ offset: i === 1 ? -1 : 0, type: 'Call', time: '14:30', note: i === 10 ? 'Coordinate possession date and snag list' : 'Remind about pending documents' }] : [],
+  [...drafted, ...signature, ...ats, ...registered].forEach((b, i) => specs.push({
+    bucket: 'booked', status: 'Converted', ageDays: 25 + i * 3, token: 101000 + pay(i) * 25000, booking: b,
+    fu: i % 7 === 1 || i % 11 === 3 || (b.possession === 'Scheduled' && i % 3 === 0) ? [{ offset: i % 2 ? -1 : 0, type: 'Call', time: '14:30', note: b.possession === 'Scheduled' ? 'Coordinate possession date and snag list' : 'Remind about pending documents' }] : [],
   }));
 
   const mk = (spec: Spec, i: number): Lead => {

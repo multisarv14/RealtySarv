@@ -178,16 +178,30 @@ const Sidebar: React.FC<SidebarProps> = ({
     });
   }, [safeLeads, searchTerm, projectFilter, statusFilter, sourceFilter, startDate, endDate, activeMenu, activeLeadTab, activeVisitTab, activeBookingTab, activeAgreementTab, activePossessionTab]);
 
-  // Counts shown on the Leads tabs (same rules as the lists below).
-  const leadTabCounts = React.useMemo(() => {
-    const general = safeLeads.filter(l => l.bookingStatus !== 'Booked'
-      && !(!!l.tokenAmount && l.tokenAmount > 0 && l.bookingStatus === 'Pending')
-      && !(l.siteVisits || []).some(v => v.status === 'Completed'));
+  // Number shown on every tab, so you can see at a glance how much is in each list (same rules as the lists below).
+  const tabCounts = React.useMemo(() => {
+    const today = todayISO();
+    const isBooked = (l: Lead) => l.bookingStatus === 'Booked';
+    const isToken = (l: Lead) => !!l.tokenAmount && l.tokenAmount > 0 && l.bookingStatus === 'Pending';
+    const doneVisit = (l: Lead) => (l.siteVisits || []).some(v => v.status === 'Completed');
+    const general = safeLeads.filter(l => !isBooked(l) && !isToken(l) && !doneVisit(l));
+    const visitsOf = (leads: Lead[], pred: (v: any) => boolean) => leads.reduce((n, l) => n + (l.siteVisits || []).filter(pred).length, 0);
+    const booked = safeLeads.filter(isBooked);
     return {
-      'Follow-up': general.filter(l => (l.tasks || []).some(t => t.title.startsWith('Follow-up:') && t.status === 'Pending')).length,
-      'Active': general.filter(l => l.leadStatus !== 'Unqualified').length,
-      'Inactive': general.filter(l => l.leadStatus === 'Unqualified').length,
-    } as Record<string, number>;
+      Leads: {
+        'Follow-up': general.filter(l => (l.tasks || []).some(t => t.title.startsWith('Follow-up:') && t.status === 'Pending')).length,
+        'Active': general.filter(l => l.leadStatus !== 'Unqualified').length,
+        'Inactive': general.filter(l => l.leadStatus === 'Unqualified').length,
+      },
+      Visits: {
+        'Scheduled': visitsOf(general, v => v.status === 'Visit Scheduled' && v.date >= today),
+        'Pending': visitsOf(general, v => v.status === 'Visit Scheduled' && v.date < today),
+        'Completed': visitsOf(safeLeads.filter(l => doneVisit(l) && !isToken(l) && !isBooked(l)), v => v.status === 'Completed'),
+      },
+      Booking: { 'Token Booking': safeLeads.filter(l => isToken(l) && !isBooked(l)).length, 'Confirmed Booking': booked.length },
+      Agreement: Object.fromEntries((['Drafted', 'Signature', 'ATS', 'Registered'] as const).map(st => [st, booked.filter(l => l.agreementStatus === st).length])),
+      Possession: { 'All': booked.length, 'Pending': booked.filter(l => l.possessionStatus === 'Pending').length, 'Scheduled': booked.filter(l => l.possessionStatus === 'Scheduled').length, 'Handed Over': booked.filter(l => l.possessionStatus === 'Handed Over').length },
+    } as Record<string, Record<string, number>>;
   }, [safeLeads]);
 
   const clearFilters = () => { setProjectFilter('all'); setStatusFilter('all'); setSourceFilter('all'); setStartDate(''); setEndDate(''); };
@@ -412,7 +426,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                   else setActivePossessionTab(tab as any);
               }} className={`flex-1 whitespace-nowrap px-3 py-2 text-[11px] font-semibold transition-colors border-b-2 ${active ? 'text-[var(--primary-color)] border-[var(--primary-color)]' : 'text-[var(--text-secondary)] border-transparent hover:text-[var(--text-primary)]'}`}>
                 {tab}
-                {activeMenu === 'Leads' && <span className={`ml-1.5 px-1.5 rounded-full text-[10px] ${active ? 'bg-[var(--primary-color)]/15' : 'bg-[var(--light-bg)]'}`}>{leadTabCounts[tab as string] ?? 0}</span>}
+                <span className={`ml-1.5 px-1.5 rounded-full text-[10px] ${active ? 'bg-[var(--primary-color)]/15' : 'bg-[var(--light-bg)]'}`}>{tabCounts[activeMenu]?.[tab as string] ?? 0}</span>
               </button>
             );
           })}

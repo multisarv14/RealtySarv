@@ -54,6 +54,7 @@ const VisitItem: React.FC<VisitItemProps> = ({
   };
 
   const btn = 'px-2 py-0.5 text-[10px] rounded font-semibold text-white transition-colors';
+  const quickBtn = 'w-6 h-6 rounded-full flex items-center justify-center bg-[var(--primary-color)] text-white shadow hover:opacity-90 transition-opacity';
   const overdue = activeTab === 'Pending';
   return (
     <div
@@ -70,13 +71,17 @@ const VisitItem: React.FC<VisitItemProps> = ({
         <div className={`text-[9px] font-semibold uppercase tracking-wide mt-0.5 ${activeTab === 'Completed' ? 'text-green-500' : overdue ? 'text-red-500' : 'text-[var(--primary-color)]'}`}>{activeTab === 'Completed' ? 'Done' : overdue ? 'Missed' : 'Visit'}</div>
       </div>
       <div className="flex-1 min-w-0">
-        <div className="flex items-baseline justify-between gap-2">
+        <div className="relative flex items-center justify-between gap-2 min-h-[22px]">
           <span className="font-semibold text-[13px] text-[var(--text-primary)] truncate">{lead.name}</span>
+          {/* Quick actions: shown on mouse-over (and always on touch screens, which have no hover) */}
+          <div className="shrink-0 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:none)]:opacity-100">
+            {lead.phone && <button type="button" onClick={(e) => { e.stopPropagation(); callNumber(lead.phone); }} className={quickBtn} aria-label="Call" title="Call"><i className="fas fa-phone-alt text-[10px]" aria-hidden="true"></i></button>}
+            <button type="button" onClick={handleFollowUpClick} className={quickBtn} aria-label="Schedule follow-up" title="Schedule follow-up"><i className="fas fa-bell text-[10px]" aria-hidden="true"></i></button>
+          </div>
         </div>
         <div className="text-[11px] text-[var(--text-secondary)] truncate leading-tight">{[visit.propertyOfInterest, (lead.initialInterest || []).join(', '), lead.budget].filter(Boolean).join(' · ') || leadSummary(lead)}</div>
         {visit.notes && <div className="text-[11px] text-[var(--text-secondary)] opacity-80 truncate leading-tight italic">“{visit.notes}”</div>}
         <div className="flex items-center justify-end gap-1 mt-1 min-h-[20px]">
-          {lead.phone && <button type="button" onClick={(e) => { e.stopPropagation(); callNumber(lead.phone); }} className="mr-auto w-6 h-6 rounded-full flex items-center justify-center bg-[var(--primary-color)] text-white hover:opacity-90" aria-label="Call" title="Call"><i className="fas fa-phone-alt text-[10px]" aria-hidden="true"></i></button>}
           {(activeTab === 'Scheduled' || activeTab === 'Pending') && (
             <>
               <button onClick={handleCompleteClick} className={`${btn} bg-green-600 hover:bg-green-700`}>Mark done</button>

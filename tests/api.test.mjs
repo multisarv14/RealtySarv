@@ -204,7 +204,7 @@ describe('demo data', () => {
     const today = new Date().toISOString().split('T')[0];
     const booked = (l) => l.bookingStatus === 'Booked', token = (l) => l.tokenAmount > 0 && l.bookingStatus === 'Pending', done = (l) => l.siteVisits.some((v) => v.status === 'Completed');
     const general = leads.filter((l) => !booked(l) && !token(l) && !done(l));
-    assert.equal(leads.length, 73);
+    assert.equal(leads.length, 126);
     assert.ok(general.some((l) => l.tasks.some((x) => x.title.startsWith('Follow-up:') && x.status === 'Pending')), 'follow-ups');
     assert.ok(general.some((l) => l.leadStatus === 'Unqualified'), 'inactive');
     const visits = general.flatMap((l) => l.siteVisits);
@@ -212,6 +212,16 @@ describe('demo data', () => {
     assert.ok(visits.some((v) => v.status === 'Visit Scheduled' && v.date < today), 'visits pending');
     assert.ok(leads.some((l) => done(l) && !token(l) && !booked(l)), 'visits completed');
     assert.ok(leads.some(token), 'tokens');
+    const count = (a, f) => a.filter(f).length;
+    // every tab holds at least 10 records
+    assert.ok(count(general, (l) => l.tasks.some((x) => x.title.startsWith('Follow-up:') && x.status === 'Pending')) >= 10, 'follow-up tab');
+    assert.ok(count(general, (l) => l.leadStatus === 'Unqualified') >= 10, 'inactive tab');
+    assert.ok(count(visits, (v) => v.status === 'Visit Scheduled' && v.date >= today) >= 10, 'visits scheduled');
+    assert.ok(count(visits, (v) => v.status === 'Visit Scheduled' && v.date < today) >= 10, 'visits pending');
+    assert.ok(count(leads, (l) => done(l) && !token(l) && !booked(l)) >= 10, 'visits completed');
+    assert.ok(count(leads, token) >= 10, 'token bookings');
+    for (const s of ['Drafted', 'Signature', 'ATS', 'Registered']) assert.ok(count(leads, (l) => booked(l) && l.agreementStatus === s) >= 10, `agreement ${s} has 10+`);
+    for (const s of ['Pending', 'Scheduled', 'Handed Over']) assert.ok(count(leads, (l) => booked(l) && l.possessionStatus === s) >= 10, `possession ${s} has 10+`);
     for (const s of ['Drafted', 'Signature', 'ATS', 'Registered']) assert.ok(leads.some((l) => booked(l) && l.agreementStatus === s), `agreement ${s}`);
     for (const s of ['Pending', 'Scheduled', 'Handed Over']) assert.ok(leads.some((l) => booked(l) && l.possessionStatus === s), `possession ${s}`);
   });

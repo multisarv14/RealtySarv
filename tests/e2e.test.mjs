@@ -151,18 +151,46 @@ describe('CRM: lists, groups, agenda and privacy (read-only)', () => {
   test('Leads tabs have the expected counts and sections', async () => {
     await tab(p, 'Follow-up'); assert.equal(await rows(p), 10);
     assert.equal((await p.locator('div.sticky').allInnerTexts()).map((x) => x.split('\n')[0]).join('|'), 'Overdue|Today · follow-ups|Tomorrow|Later');
-    await tab(p, 'Active'); assert.equal(await rows(p), 36);
-    await tab(p, 'Inactive'); assert.equal(await rows(p), 6);
+    await tab(p, 'Active'); assert.equal(await rows(p), 44);
+    await tab(p, 'Inactive'); assert.equal(await rows(p), 10);
   });
   test('Visits / Booking / Agreement / Possession are all populated', async () => {
     await menu(p, MENU.visits);
-    for (const [t, n] of [['Scheduled', 8], ['Pending', 4], ['Completed', 6]]) { await tab(p, t); assert.equal(await rows(p), n, `visits ${t}`); }
+    for (const [t, n] of [['Scheduled', 10], ['Pending', 10], ['Completed', 10]]) { await tab(p, t); assert.equal(await rows(p), n, `visits ${t}`); }
     await tab(p, 'Scheduled'); assert.ok(await p.locator('div.sticky').count() >= 5, 'visits grouped by day');
-    await menu(p, MENU.booking); await tab(p, 'Token'); assert.equal(await rows(p), 7); await tab(p, 'Confirmed'); assert.equal(await rows(p), 18);
+    await menu(p, MENU.booking); await tab(p, 'Token'); assert.equal(await rows(p), 10); await tab(p, 'Confirmed'); assert.equal(await rows(p), 52);
     await menu(p, MENU.agreement);
-    for (const [t, n] of [['Drafted', 3], ['Signature', 3], ['ATS', 3], ['Registered', 9]]) { await tab(p, t); assert.equal(await rows(p), n, `agreement ${t}`); }
+    for (const [t, n] of [['Drafted', 10], ['Signature', 10], ['ATS', 10], ['Registered', 22]]) { await tab(p, t); assert.equal(await rows(p), n, `agreement ${t}`); }
     await menu(p, MENU.possession);
-    for (const [t, n] of [['All', 18], ['Pending', 12], ['Scheduled', 3], ['Handed', 3]]) { await tab(p, t); assert.equal(await rows(p), n, `possession ${t}`); }
+    for (const [t, n] of [['All', 52], ['Pending', 32], ['Scheduled', 10], ['Handed', 10]]) { await tab(p, t); assert.equal(await rows(p), n, `possession ${t}`); }
+  });
+  test('every tab shows its count, and it matches the list', async () => {
+    for (const m of [MENU.leads, MENU.visits, MENU.booking, MENU.agreement, MENU.possession]) {
+      await menu(p, m);
+      const tabs = await p.locator('[role=tablist]').first().getByRole('tab').all();
+      for (const t of tabs) {
+        const label = (await t.innerText()).replace(/\s+/g, ' ').trim();
+        const shown = Number(label.match(/(\d+)$/)?.[1]);
+        await t.click(); await p.waitForTimeout(300);
+        assert.equal(await rows(p), shown, `${m} / ${label}`);
+      }
+    }
+    await menu(p, MENU.leads);
+  });
+  test('Visits rows: Call and Follow-up appear only on mouse-over (always on touch screens)', async () => {
+    await menu(p, MENU.visits); await tab(p, 'Scheduled');
+    const row = p.locator('[role=button][tabindex="0"]').first();
+    const opacity = () => row.locator('button[aria-label=Call]').evaluate((e) => getComputedStyle(e.parentElement).opacity);
+    await p.mouse.move(900, 500); await p.waitForTimeout(250);
+    assert.equal(await opacity(), '0', 'hidden until you point at the row');
+    await row.hover(); await p.waitForTimeout(300);
+    assert.equal(await opacity(), '1', 'visible on hover');
+    assert.equal(await row.locator('button[aria-label="Schedule follow-up"]').isVisible(), true);
+    const touch = await browser.newContext({ viewport: { width: 390, height: 800 }, hasTouch: true, isMobile: true });
+    const t = await touch.newPage(); t.setDefaultTimeout(8000); await signIn(t); await menu(t, MENU.visits);
+    const trow = t.locator('[role=button][tabindex="0"]').first();
+    assert.equal(await trow.locator('button[aria-label=Call]').evaluate((e) => getComputedStyle(e.parentElement).opacity), '1', 'touch: always visible');
+    await touch.close(); await menu(p, MENU.leads);
   });
   test('the agenda belongs to the menu you are in', async () => {
     const agendaText = async () => { await p.getByRole('button', { name: /agenda/i }).click(); await p.waitForTimeout(300); const t = await p.locator('div.absolute.top-full').last().innerText(); await p.getByRole('button', { name: /agenda/i }).click(); return t; };
