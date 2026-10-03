@@ -9,6 +9,9 @@
   the owner's Admin account and the starter master data. The owner is then sent to `https://<subdomain>.realtysarv.com`.
 - Clients and their team sign in **only on their company address**. The owner adds the team in Admin → Users.
   Self-signup is off (`ALLOW_SELF_SIGNUP=false`).
+- Plans are enforced by the API: **Growth Hub** = LeadSarv CRM only, up to 10 active users; **Ultimate Stack** = all three modules, unlimited users.
+  Locked modules show a lock in the app and their API routes return 403. Limits live in `server/src/config/plans.ts` (and `plans.ts` for the website).
+- Landing-page extras live in `landingContent.ts`: customer logos/quotes (the Customers section appears once you add some) and your contact details (shown in the footer and legal pages).
 - The API picks the company from the `Host` header. A login token is bound to one company and is rejected on any other.
 
 ## Run locally

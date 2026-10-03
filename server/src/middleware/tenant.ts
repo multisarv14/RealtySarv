@@ -3,7 +3,7 @@ import { Tenant } from '../models/master';
 import { modelsFor, tenantDb, TenantModels } from '../models';
 
 export interface TenantRequest extends Request {
-  tenant?: { _id: string; companyName: string; dbName: string; status: string };
+  tenant?: { _id: string; companyName: string; dbName: string; status: string; plan?: string; modules?: { crm?: boolean; erp?: boolean } };
   models?: TenantModels;
   userId?: string;
   role?: string;

@@ -44,7 +44,7 @@ export async function http<T = any>(method: string, path: string, body?: unknown
 export const authApi = {
   login: (identity: string, password: string) => http('POST', '/auth/login', { identity, password }, { auth: false }),
   register: (body: { name?: string; email: string; password: string; phone?: string }) => http('POST', '/auth/register', body, { auth: false }),
-  workspace: () => http<{ name: string; subdomain: string; setupCompleted: boolean }>('GET', '/auth/workspace', undefined, { auth: false }),
+  workspace: () => http<{ name: string; subdomain: string; setupCompleted: boolean; allowSignup?: boolean; plan?: string | null; modules?: { crm?: boolean; erp?: boolean }; maxUsers?: number | null }>('GET', '/auth/workspace', undefined, { auth: false }),
   me: () => http('GET', '/auth/me'),
   exchange: (token: string) => http<{ token: string; user: any }>('POST', '/auth/exchange', { token }, { auth: false }),
 };

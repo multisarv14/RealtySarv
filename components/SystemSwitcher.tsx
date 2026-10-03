@@ -7,9 +7,12 @@ interface SystemSwitcherProps {
   onSwitch: (system: SystemType) => void;
   onGoToAdmin: () => void;
   currentAppView: 'main' | 'admin';
+  /** Modules not included in the company's plan: shown with a lock and not clickable. */
+  lockedSystems?: SystemType[];
 }
 
-const SystemSwitcher: React.FC<SystemSwitcherProps> = ({ activeSystem, onSwitch, onGoToAdmin, currentAppView }) => {
+const SystemSwitcher: React.FC<SystemSwitcherProps> = ({ activeSystem, onSwitch, onGoToAdmin, currentAppView, lockedSystems = [] }) => {
+  const locked = (sys: SystemType) => lockedSystems.includes(sys);
   return (
     <div className="bg-[var(--dark-bg)] border-b border-[var(--light-bg)] px-4 h-12 flex items-center justify-between z-50 flex-shrink-0 shadow-lg">
       <div className="flex items-center gap-1 h-full">
@@ -31,8 +34,10 @@ const SystemSwitcher: React.FC<SystemSwitcherProps> = ({ activeSystem, onSwitch,
         </button>
 
         <button 
-          onClick={() => onSwitch('ProjectSarv')}
-          className={`h-full px-5 flex items-center gap-2 transition-all border-b-2 relative group ${
+          onClick={() => !locked('ProjectSarv') && onSwitch('ProjectSarv')}
+          disabled={locked('ProjectSarv')}
+          title={locked('ProjectSarv') ? 'Included in the Ultimate Stack plan' : undefined}
+          className={`h-full px-5 flex items-center gap-2 transition-all border-b-2 relative group ${locked('ProjectSarv') ? 'opacity-50 cursor-not-allowed ' : ''}${
             activeSystem === 'ProjectSarv' 
             ? 'border-[#3b82f6] text-[#3b82f6] bg-[#3b82f6]/5 font-bold' 
             : 'border-transparent text-[var(--text-secondary)] hover:text-[#3b82f6] hover:bg-[#3b82f6]/5'
@@ -44,12 +49,15 @@ const SystemSwitcher: React.FC<SystemSwitcherProps> = ({ activeSystem, onSwitch,
           <span className="text-[11px] uppercase tracking-widest flex items-center">
             <span className="font-bold">Project</span><span className="font-light opacity-80">Sarv</span>
           </span>
+          {locked('ProjectSarv') && <i className="fas fa-lock text-[10px] opacity-70" aria-hidden="true"></i>}
            {activeSystem === 'ProjectSarv' && <div className="absolute -bottom-[2px] left-0 right-0 h-[2px] bg-[#3b82f6] shadow-[0_0_12px_#3b82f6]"></div>}
         </button>
 
         <button 
-          onClick={() => onSwitch('FinanceSarv')}
-          className={`h-full px-5 flex items-center gap-2 transition-all border-b-2 relative group ${
+          onClick={() => !locked('FinanceSarv') && onSwitch('FinanceSarv')}
+          disabled={locked('FinanceSarv')}
+          title={locked('FinanceSarv') ? 'Included in the Ultimate Stack plan' : undefined}
+          className={`h-full px-5 flex items-center gap-2 transition-all border-b-2 relative group ${locked('FinanceSarv') ? 'opacity-50 cursor-not-allowed ' : ''}${
             activeSystem === 'FinanceSarv' 
             ? 'border-[#6366f1] text-[#6366f1] bg-[#6366f1]/5 font-bold' 
             : 'border-transparent text-[var(--text-secondary)] hover:text-[#6366f1] hover:bg-[#6366f1]/5'
@@ -61,6 +69,7 @@ const SystemSwitcher: React.FC<SystemSwitcherProps> = ({ activeSystem, onSwitch,
           <span className="text-[11px] uppercase tracking-widest flex items-center">
             <span className="font-bold">Finance</span><span className="font-light opacity-80">Sarv</span>
           </span>
+          {locked('FinanceSarv') && <i className="fas fa-lock text-[10px] opacity-70" aria-hidden="true"></i>}
            {activeSystem === 'FinanceSarv' && <div className="absolute -bottom-[2px] left-0 right-0 h-[2px] bg-[#6366f1] shadow-[0_0_12px_#6366f1]"></div>}
         </button>
       </div>

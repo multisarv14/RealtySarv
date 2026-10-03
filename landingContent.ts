@@ -13,3 +13,10 @@ export const TESTIMONIALS: Testimonial[] = [];
 
 /** Company names shown in the "Trusted by" strip, e.g. ['Skyline Developers', 'Orchid Realty'] */
 export const CLIENTS: string[] = [];
+
+/** Contact details shown in the footer and on the Privacy/Terms pages. Fill in what you want to publish; empty fields are hidden. */
+export const CONTACT = {
+  email: '',
+  phone: '',
+  address: '',
+};

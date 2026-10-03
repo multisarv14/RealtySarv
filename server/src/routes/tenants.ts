@@ -7,14 +7,8 @@ import { seedTenant } from '../seedData';
 import jwt from 'jsonwebtoken';
 import { RESERVED_SUBDOMAINS, SUBDOMAIN_RE } from '../middleware/tenant';
 import { JWT_SECRET } from '../middleware/auth';
+import { PLAN_SPECS } from '../config/plans';
 
-// What each plan includes. The modules are derived from the plan so the two can never disagree.
-const PLANS: Record<string, { crm: boolean; erp: boolean }> = {
-  'Growth Hub': { crm: true, erp: false },
-  'Ultimate Stack': { crm: true, erp: true },
-};
-
-// Public endpoints used by the main site (realtysarv.com): check a workspace address, create a company.
 const router = Router();
 
 const clean = (v: unknown) => String(v ?? '').trim().toLowerCase();
@@ -59,14 +53,14 @@ router.post('/', async (req: Request, res: Response) => {
   const mail = clean(admin?.email);
   const problem = subdomainProblem(sub);
   if (problem) return res.status(400).json({ message: problem });
-  if (!PLANS[String(plan)]) return res.status(400).json({ message: 'Please choose a plan.' });
+  if (!PLAN_SPECS[String(plan)]) return res.status(400).json({ message: 'Please choose a plan.' });
   if (!String(companyName ?? '').trim()) return res.status(400).json({ message: 'Company name is required.' });
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(mail)) return res.status(400).json({ message: 'A valid admin email is required.' });
   if (String(admin?.password ?? '').length < 6) return res.status(400).json({ message: 'Admin password must be at least 6 characters.' });
 
   const dbName = `rs_${sub}`;
   try {
-    await Tenant.create({ _id: sub, companyName: String(companyName).trim(), dbName, status: 'active', plan, modules: PLANS[String(plan)] });
+    await Tenant.create({ _id: sub, companyName: String(companyName).trim(), dbName, status: 'active', plan, modules: PLAN_SPECS[String(plan)].modules });
   } catch (e: any) {
     if (e?.code === 11000) return res.status(409).json({ message: 'That address is already taken.' });
     throw e;

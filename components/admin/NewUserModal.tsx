@@ -8,7 +8,7 @@ import { db } from '../../db';
 interface NewUserModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddUser: (userData: NewUserData) => void;
+  onAddUser: (userData: NewUserData) => void | Promise<unknown>;
   users: User[];
 }
 
@@ -51,12 +51,19 @@ const NewUserModal: React.FC<NewUserModalProps> = ({ isOpen, onClose, onAddUser,
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [submitError, setSubmitError] = React.useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitError(null);
     if (validate()) {
-      // Fixed: Added missing assignedProjectIds to satisfy NewUserData type requirement
-      onAddUser({ name: name.trim(), username: username.trim(), password, email: email.trim(), phone: phone.trim(), role, reportsTo: reportsTo || null, customData, assignedProjectIds: [] });
-      onClose();
+      try {
+        // The server can refuse (e.g. the plan's active-user limit); keep the form open and say why.
+        await onAddUser({ name: name.trim(), username: username.trim(), password, email: email.trim(), phone: phone.trim(), role, reportsTo: reportsTo || null, customData, assignedProjectIds: [] });
+        onClose();
+      } catch (err: any) {
+        setSubmitError(err?.message || 'Could not add the user. Please try again.');
+      }
     }
   };
 
@@ -66,6 +73,7 @@ const NewUserModal: React.FC<NewUserModalProps> = ({ isOpen, onClose, onAddUser,
     <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50 animate-fadeIn" onClick={onClose} role="dialog" aria-modal="true">
       <div className="bg-[var(--medium-bg)] p-6 sm:p-8 rounded-lg shadow-xl w-11/12 max-w-lg relative max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-xl sm:text-2xl font-bold mb-6 text-[var(--text-primary)] text-center">Add New User</h3>
+        {submitError && <div role="alert" className="mb-4 text-sm text-red-300 bg-red-900/30 border border-red-500/40 rounded-md p-3">{submitError}</div>}
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {isVisible('name') && (

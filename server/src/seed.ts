@@ -16,7 +16,7 @@ async function main() {
   else {
     await tenantDb(dbName).dropDatabase();
     await Tenant.deleteOne({ _id: SUB });
-    await Tenant.create({ _id: SUB, companyName: 'MultiSarv Pvt.Ltd', dbName, status: 'active', plan: 'Professional', modules: { crm: true, erp: true } });
+    await Tenant.create({ _id: SUB, companyName: 'MultiSarv Pvt.Ltd', dbName, status: 'active', plan: 'Ultimate Stack', modules: { crm: true, erp: true } });
     await seedTenant(modelsFor(tenantDb(dbName)), { demo: true });
     console.log(`Seeded demo tenant "${SUB}" -> ${dbName}`);
   }

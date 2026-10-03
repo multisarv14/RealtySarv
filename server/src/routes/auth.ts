@@ -5,6 +5,7 @@ import { randomUUID } from 'crypto';
 import { toClient } from '../models';
 import { AuthedRequest, JWT_SECRET, requireAuth } from '../middleware/auth';
 import { TenantRequest } from '../middleware/tenant';
+import { PLAN_SPECS } from '../config/plans';
 
 const router = Router();
 // Off by default: a company owner adds their team in Admin -> Users. Set ALLOW_SELF_SIGNUP=true to let people sign themselves up.
@@ -48,7 +49,11 @@ router.post('/register', async (req: Request, res: Response) => {
 router.get('/workspace', async (req: Request, res: Response) => {
   const t = req as TenantRequest;
   const p: any = await t.models!.companyProfile.findOne().lean();
-  res.json({ name: p?.name ?? t.tenant!.companyName, subdomain: t.tenant!._id, setupCompleted: !!p?.setupCompleted, allowSignup: signupAllowed() });
+  const spec = PLAN_SPECS[t.tenant!.plan ?? ''];
+  res.json({
+    name: p?.name ?? t.tenant!.companyName, subdomain: t.tenant!._id, setupCompleted: !!p?.setupCompleted, allowSignup: signupAllowed(),
+    plan: t.tenant!.plan ?? null, modules: t.tenant!.modules ?? { crm: true, erp: true }, maxUsers: spec ? spec.maxUsers : null,
+  });
 });
 
 // Trade the short-lived handoff pass from the install wizard for a normal session on this company's address.

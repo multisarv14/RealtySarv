@@ -1,6 +1,7 @@
 import React from 'react';
 import { PLANS, PlanId } from '../plans';
-import { CLIENTS, TESTIMONIALS } from '../landingContent';
+import { CLIENTS, TESTIMONIALS, CONTACT } from '../landingContent';
+import { PrivacyPolicy, TermsOfService } from './LegalPages';
 
 interface LandingPageProps {
   onSignInClick: () => void;
@@ -8,7 +9,7 @@ interface LandingPageProps {
   onStartFreeClick: (plan?: PlanId) => void;
 }
 
-type PageType = 'home' | 'docs';
+type PageType = 'home' | 'docs' | 'privacy' | 'terms';
 type ProductId = 'lead' | 'project' | 'finance';
 
 // Everything below describes screens that exist in the app (LeadSarv tabs, ProjectSarv menu, FinanceSarv menu, Admin).
@@ -121,6 +122,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onSignInClick, onStartFreeCli
   };
 
   const openDocs = () => { setMenuOpen(false); setCurrentPage('docs'); scrollerRef.current?.scrollTo({ top: 0 }); };
+  const openPage = (page: PageType) => { setMenuOpen(false); setCurrentPage(page); scrollerRef.current?.scrollTo({ top: 0 }); };
   const goHome = () => { setMenuOpen(false); setCurrentPage('home'); scrollerRef.current?.scrollTo({ top: 0 }); };
   const startFree = (plan?: PlanId) => { setMenuOpen(false); onStartFreeClick(plan); };
 
@@ -340,14 +342,30 @@ const LandingPage: React.FC<LandingPageProps> = ({ onSignInClick, onStartFreeCli
               <div>
                 <span className="flex items-center gap-2 text-white text-lg font-bold mb-1"><span className="w-7 h-7 bg-[#1a73e8] rounded-sm flex items-center justify-center"><i className="fas fa-cube text-[10px]" aria-hidden="true"></i></span>RealtySarv</span>
                 <p>© {new Date().getFullYear()} MultiSarv Pvt.Ltd. All rights reserved.</p>
+                {(CONTACT.email || CONTACT.phone) && (
+                  <p className="mt-1">
+                    {CONTACT.email && <a href={`mailto:${CONTACT.email}`} className="hover:text-white">{CONTACT.email}</a>}
+                    {CONTACT.email && CONTACT.phone && ' · '}
+                    {CONTACT.phone && <a href={`tel:${CONTACT.phone.replace(/\s/g, '')}`} className="hover:text-white">{CONTACT.phone}</a>}
+                  </p>
+                )}
               </div>
               <nav className="flex flex-wrap gap-x-6 gap-y-1" aria-label="Footer">
                 {NAV.map((n) => <button key={n.id} onClick={() => scrollToSection(n.id)} className="min-h-11 hover:text-white">{n.label}</button>)}
                 <button onClick={openDocs} className="min-h-11 hover:text-white">Docs</button>
                 <button onClick={onSignInClick} className="min-h-11 hover:text-white">Sign in</button>
+                <button onClick={() => openPage('privacy')} className="min-h-11 hover:text-white">Privacy</button>
+                <button onClick={() => openPage('terms')} className="min-h-11 hover:text-white">Terms</button>
               </nav>
             </div>
           </footer>
+        </main>
+      ) : currentPage === 'privacy' || currentPage === 'terms' ? (
+        <main className="pt-28 px-5 sm:px-6 pb-20 min-h-screen bg-white">
+          <article className="max-w-3xl mx-auto">
+            {currentPage === 'privacy' ? <PrivacyPolicy /> : <TermsOfService />}
+            <button onClick={goHome} className="mt-4 min-h-11 text-[#1a73e8] font-bold flex items-center gap-2 hover:underline"><i className="fas fa-arrow-left text-xs" aria-hidden="true"></i> Back to overview</button>
+          </article>
         </main>
       ) : (
         <main className="pt-28 px-5 sm:px-6 pb-20 text-center min-h-screen bg-white flex flex-col items-center">

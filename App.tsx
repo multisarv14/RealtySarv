@@ -43,6 +43,7 @@ const App: React.FC = () => {
     return (localStorage.getItem('lastActiveSystem') as SystemType) || 'LeadSarv';
   });
   const [showInstallationWizard, setShowInstallationWizard] = React.useState<boolean>(false);
+  const [workspaceInfo, setWorkspaceInfo] = React.useState<{ plan?: string | null; modules?: { crm?: boolean; erp?: boolean } } | null>(null);
   const [wizardPlan, setWizardPlan] = React.useState<PlanId | undefined>(undefined);
 
   // viewState controls exactly what the user sees: the marketing landing page, the sign-in screen, or the app itself
@@ -152,6 +153,16 @@ const App: React.FC = () => {
       throw new Error(error?.status ? error.message : 'Can’t reach the server. Check your connection and try again.');
     }
   };
+
+  // Which modules the company's plan includes (Growth Hub = CRM only).
+  React.useEffect(() => {
+    if (viewState !== 'authenticated') { setWorkspaceInfo(null); return; }
+    authApi.workspace().then(setWorkspaceInfo).catch(() => setWorkspaceInfo(null));
+  }, [viewState]);
+  const lockedSystems: SystemType[] = workspaceInfo?.modules?.erp === false ? ['ProjectSarv', 'FinanceSarv'] : [];
+  React.useEffect(() => {
+    if (lockedSystems.includes(activeSystem)) setActiveSystem('LeadSarv');
+  }, [workspaceInfo, activeSystem]);
 
   const handleLoginSuccess = (user: User) => {
     setCurrentUser(user);
@@ -266,7 +277,7 @@ const App: React.FC = () => {
     return (
       <AdminPanel
         leads={leads} onUpdateLeads={handleLeadsUpdate}
-        users={users} onUpdateUsers={handleUsersUpdate} onAddUser={async (u) => await db.users.add({ id: uuidv4(), ...u, isActive: true, assignedProjectIds: [] })} onUpdateUser={async (u) => await db.users.put(u)}
+        users={users} onUpdateUsers={handleUsersUpdate} onAddUser={async (u) => await db.users.add({ id: uuidv4(), ...u, isActive: true, assignedProjectIds: [] })} onUpdateUser={async (u) => { try { await db.users.put(u); } catch (e: any) { window.alert(e?.message || 'Could not save the user.'); } }}
         sources={sources} onUpdateSources={async (s) => await db.sources.bulkPut(s)} onAddSource={async (s) => await db.sources.add({ id: uuidv4(), ...s })}
         projects={projects} onUpdateProjects={handleProjectsUpdate} onAddProject={async (p) => await db.projects.add({ id: uuidv4(), ...p, inventory: [], parkingInventory: [] })} onDeleteProject={async (id) => await db.projects.delete(id)}
         templates={templates} onUpdateTemplates={async (t) => await db.templates.bulkPut(t)} onAddTemplate={async (t) => await db.templates.add({ id: uuidv4(), ...t })}
@@ -308,6 +319,7 @@ const App: React.FC = () => {
           onSwitch={setActiveSystem}
           onGoToAdmin={() => setCurrentAppView('admin')}
           currentAppView={currentAppView}
+          lockedSystems={lockedSystems}
         />
       )}
 
