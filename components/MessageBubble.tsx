@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Message } from '../types';
 
@@ -6,22 +5,24 @@ interface MessageBubbleProps {
   message: Message;
 }
 
+// Colours come from the app's theme variables (index.css), so bubbles follow the in-app
+// dark/light switch instead of the operating system's colour scheme.
 const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
   const { content, time, sender } = message;
   const isSent = sender === 'sent';
 
   return (
     <div
-      className={`max-w-[75%] px-3.5 py-2 rounded-2xl mb-1 relative animate-fadeIn flex flex-col ${
+      className={`max-w-[75%] px-3.5 py-2 rounded-2xl mb-1 relative animate-fadeIn flex flex-col border text-[var(--text-primary)] ${
         isSent
-          ? 'bg-[#d9fdd3] dark:bg-[#005c4b] self-end rounded-tr-none text-gray-900 dark:text-[#e9edef]'
-          : 'bg-white dark:bg-[#202c33] self-start rounded-tl-none border border-black/5 dark:border-white/5 shadow-sm text-gray-900 dark:text-[#e9edef]'
+          ? 'bg-[var(--sent-message)] border-transparent self-end rounded-tr-none'
+          : 'bg-[var(--received-message)] border-[var(--border-color)] self-start rounded-tl-none'
       }`}
     >
       <div className="text-[13px] leading-relaxed whitespace-pre-wrap">{content}</div>
-      <div className={`text-[9px] mt-1 self-end font-medium tracking-tighter opacity-60 ${isSent ? 'text-gray-600 dark:text-[#8696a0]' : 'text-gray-500 dark:text-[#8696a0]'}`}>
+      <div className="text-[10px] mt-1 self-end font-medium text-[var(--text-secondary)]">
           {time}
-          {isSent && <i className="fas fa-check-double ml-1 text-blue-400"></i>}
+          {isSent && <i className="fas fa-check-double ml-1 text-sky-400" aria-hidden="true"></i>}
       </div>
     </div>
   );

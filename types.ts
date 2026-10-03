@@ -135,7 +135,7 @@ export interface IntegrationOptionType {
 }
 
 // --- New Data Interfaces (for Modals) ---
-export interface NewLeadData { firstName: string; lastName: string; email: string; phone: string; initialInterest: string[]; preferredLocation: string; budget: string; clientProfile: string; livingPlace: string; leadStatus: LeadStatus; channelSource: string; sourceName: string; leadProject: string; message?: string; customData?: Record<string, any>; followUp?: NewFollowUpData; }
+export interface NewLeadData { ownerId?: string; firstName: string; lastName: string; email: string; phone: string; initialInterest: string[]; preferredLocation: string; budget: string; clientProfile: string; livingPlace: string; leadStatus: LeadStatus; channelSource: string; sourceName: string; leadProject: string; message?: string; customData?: Record<string, any>; followUp?: NewFollowUpData; }
 export interface NewSiteVisitData { date: string; time: string; propertyOfInterest: string; notes?: string; }
 export interface NewTaskData { title: string; description?: string; dueDate: string; priority: TaskPriority; assignedTo: string; }
 export interface NewFollowUpData { type: 'Call' | 'Email' | 'Meeting'; date: string; time: string; notes?: string; assignedTo: string; }

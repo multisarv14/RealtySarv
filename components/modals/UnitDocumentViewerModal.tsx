@@ -4,6 +4,7 @@ import { Lead, Project } from '../../types';
 import BookingFormTemplate from '../document_templates/BookingFormTemplate';
 import AllotmentLetterTemplate from '../document_templates/AllotmentLetterTemplate';
 import PossessionLetterTemplate from '../document_templates/PossessionLetterTemplate';
+import { Modal, Button } from '../ui/Modal';
 import PaymentReceiptTemplate from '../document_templates/PaymentReceiptTemplate';
 import DemandLetterTemplate from '../document_templates/DemandLetterTemplate';
 
@@ -59,10 +60,6 @@ const UnitDocumentViewerModal: React.FC<UnitDocumentViewerModalProps> = ({ isOpe
     }
   };
   
-  const handleDownload = () => {
-      alert("Simulating PDF download...");
-  };
-
   const renderTemplate = () => {
     switch(templateType) {
         case 'Booking Form':
@@ -86,42 +83,15 @@ const UnitDocumentViewerModal: React.FC<UnitDocumentViewerModalProps> = ({ isOpe
     }
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div
-      className="fixed inset-0 bg-black bg-opacity-80 flex justify-center items-center z-50 p-4 animate-fadeIn"
-      onClick={onClose}
-    >
-      <div
-        className="bg-[var(--medium-bg)] rounded-lg shadow-xl w-full max-w-4xl h-[95vh] flex flex-col"
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="flex-shrink-0 flex justify-between items-center p-4 border-b border-[var(--light-bg)]">
-          <h3 className="text-lg font-semibold text-[var(--text-primary)]">
-            Document Viewer: {templateType}
-          </h3>
-          <button onClick={onClose} className="p-2 rounded-full hover:bg-[var(--light-bg)]">
-            <i className="fas fa-times text-[var(--text-secondary)]"></i>
-          </button>
-        </div>
-        
-        <div className="flex-1 bg-gray-200 p-4 sm:p-6 overflow-y-auto text-black">
-          <div ref={printRef} className="bg-white max-w-[210mm] min-h-[297mm] mx-auto p-12 shadow-lg">
-             {renderTemplate()}
-          </div>
-        </div>
-
-        <div className="flex-shrink-0 flex justify-end items-center p-3 border-t border-[var(--light-bg)] gap-3">
-          <button onClick={handleDownload} className="px-4 py-2 text-sm rounded-md bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors flex items-center gap-2">
-            <i className="fas fa-file-pdf"></i> Download as PDF
-          </button>
-          <button onClick={handlePrint} className="px-4 py-2 text-sm rounded-md bg-[var(--primary-color)] text-white font-medium hover:bg-[#128c7e] transition-colors flex items-center gap-2">
-            <i className="fas fa-print"></i> Print Document
-          </button>
+    <Modal isOpen={isOpen} onClose={onClose} size="4xl" title={templateType} subtitle={`${lead.name}${project ? ' · ' + project.name : ''}`}
+      footer={<><Button type="button" tone="ghost" onClick={onClose}>Close</Button><Button type="button" onClick={handlePrint}><i className="fas fa-print" aria-hidden="true"></i>Print or save as PDF</Button></>}>
+      <div className="h-[64vh] -m-1 rounded-lg bg-gray-200 p-3 sm:p-5 overflow-y-auto text-black">
+        <div ref={printRef} className="bg-white max-w-[210mm] min-h-[297mm] mx-auto p-8 sm:p-12 shadow-lg">
+          {renderTemplate()}
         </div>
       </div>
-    </div>
+    </Modal>
   );
 };
 

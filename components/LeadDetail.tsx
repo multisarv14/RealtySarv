@@ -1,5 +1,6 @@
 
 import React from 'react';
+import { callNumber, openWhatsApp } from './leadUi';
 import { Lead, TaskStatus, TaskPriority, AgreementStatus, BookingStatus, PossessionStatus, LifecycleStage, LeadLifecycleStatus, LeadStatus, User } from '../types';
 import Avatar from './Avatar';
 
@@ -124,7 +125,15 @@ const LeadDetail: React.FC<LeadDetailProps> = ({ lead, users, onAddPropertyImage
                   <div className="space-y-3">
                       <h3 className="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">Essentials</h3>
                       <div className="flex items-center gap-3 text-xs text-[var(--text-primary)]"><i className="fas fa-envelope w-4 text-[var(--primary-color)]"></i> {lead.email}</div>
-                      <div className="flex items-center gap-3 text-xs text-[var(--text-primary)]"><i className="fas fa-phone w-4 text-[var(--primary-color)]"></i> {lead.phone}</div>
+                      <div className="flex items-center gap-3 text-xs text-[var(--text-primary)]">
+                        <i className="fas fa-phone w-4 text-[var(--primary-color)]" aria-hidden="true"></i>
+                        {lead.phone ? (
+                          <span className="flex items-center gap-2">
+                            <button type="button" onClick={() => callNumber(lead.phone)} className="px-2 py-0.5 rounded bg-[var(--primary-color)] text-white font-semibold hover:opacity-90">Call</button>
+                            <button type="button" onClick={() => openWhatsApp(lead.phone)} className="px-2 py-0.5 rounded border border-[var(--border-color)] font-semibold hover:bg-[var(--light-bg)]">WhatsApp</button>
+                          </span>
+                        ) : <span className="text-[var(--text-secondary)]">No number saved</span>}
+                      </div>
                       <div className="flex items-center gap-3 text-xs text-[var(--text-primary)]">
                         <i className="fas fa-user-tag w-4 text-[var(--primary-color)]"></i>
                         <select value={lead.ownerId} onChange={(e) => onUpdateLeadOwner(lead.id, e.target.value)} className="bg-transparent text-xs border-none p-0 focus:ring-0 cursor-pointer text-blue-500 font-bold hover:underline">

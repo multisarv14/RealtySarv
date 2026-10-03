@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Lead, SiteVisit } from '../types';
-import Avatar from './Avatar';
+import { callNumber, leadSummary } from './leadUi';
 
 interface VisitItemProps {
   visit: SiteVisit;
@@ -53,84 +53,46 @@ const VisitItem: React.FC<VisitItemProps> = ({
     onTokenEntry(lead.id);
   };
 
+  const btn = 'px-2 py-0.5 text-[10px] rounded font-semibold text-white transition-colors';
+  const overdue = activeTab === 'Pending';
   return (
     <div
+      role="button"
+      tabIndex={0}
+      aria-current={isActive ? 'true' : undefined}
       onClick={() => onClick(visit.leadId)}
-      className={`group relative flex p-3 gap-3 cursor-pointer border-b border-[var(--border-color)] transition-colors hover:bg-[var(--medium-bg)] ${
-        isActive ? 'bg-[var(--light-bg)]' : ''
-      }`}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(visit.leadId); } }}
+      className={`group relative flex py-2 pr-3 pl-1 gap-2 cursor-pointer border-b border-[var(--border-color)] transition-colors hover:bg-[var(--light-bg)] focus-visible:outline-none focus-visible:bg-[var(--light-bg)] ${isActive ? 'bg-[var(--light-bg)] shadow-[inset_3px_0_0_var(--primary-color)]' : ''}`}
     >
-      <Avatar initials={lead.avatarInitials} size="lg" />
-      <div className="flex-1 overflow-hidden">
-        <div className="flex justify-between items-center">
-          <p className="font-semibold whitespace-nowrap overflow-hidden text-ellipsis text-base text-white">
-            {lead.name}
-          </p>
-          <p className="text-xs text-[var(--text-secondary)] flex-shrink-0 group-hover:opacity-0 transition-opacity">
-            {new Date(visit.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-          </p>
-        </div>
-        <p className="text-sm text-[var(--text-secondary)] mt-0.5 whitespace-nowrap overflow-hidden text-ellipsis">
-          {visit.propertyOfInterest}
-        </p>
-        <div className="flex justify-between items-center mt-2">
-          <p className="text-sm text-[var(--text-secondary)]">
-            <i className="far fa-clock mr-1 text-[var(--primary-color)]"></i>
-            {visit.time}
-          </p>
-          <div className="flex items-center gap-1.5">
-              {(activeTab === 'Scheduled' || activeTab === 'Pending') && (
-                <>
-                  <button
-                    onClick={handleCompleteClick}
-                    className="px-2 py-1 text-[9px] rounded bg-green-600 text-white font-semibold uppercase hover:bg-green-700 transition-colors shadow-sm"
-                  >
-                    Done
-                  </button>
-                  <button
-                    onClick={handleRescheduleClick}
-                    className="px-2 py-1 text-[9px] rounded bg-gray-700 text-white font-semibold uppercase hover:bg-gray-600 transition-colors shadow-sm"
-                  >
-                    Resched
-                  </button>
-                </>
-              )}
-              
-              {activeTab === 'Completed' && lead.bookingStatus !== 'Booked' && (
-                <>
-                    <button
-                        onClick={handleTokenEntryClick}
-                        className="px-2 py-1 text-[9px] rounded bg-yellow-600 text-white font-semibold uppercase hover:bg-yellow-700 transition-colors shadow-sm"
-                    >
-                        Token
-                    </button>
-                    <button
-                        onClick={handleBookingClick}
-                        className="px-2 py-1 text-[9px] rounded bg-purple-600 text-white font-semibold uppercase hover:bg-purple-700 transition-colors shadow-sm"
-                    >
-                        Book
-                    </button>
-                </>
-              )}
-              
-              {activeTab === 'Completed' && lead.bookingStatus === 'Booked' && (
-                 <span className="px-2 py-1 text-[9px] rounded bg-green-800 text-green-100 font-semibold uppercase border border-green-700">
-                    Booked
-                 </span>
-              )}
-          </div>
-        </div>
+      {/* Time first: a visit list is read by the clock */}
+      <div className="w-14 shrink-0 text-center pt-0.5">
+        <div className={`text-[13px] font-bold leading-tight ${overdue ? 'text-red-500' : 'text-[var(--text-primary)]'}`}>{visit.time || '--:--'}</div>
+        <div className={`text-[9px] font-semibold uppercase tracking-wide mt-0.5 ${activeTab === 'Completed' ? 'text-green-500' : overdue ? 'text-red-500' : 'text-[var(--primary-color)]'}`}>{activeTab === 'Completed' ? 'Done' : overdue ? 'Missed' : 'Visit'}</div>
       </div>
-
-      {/* Hover Actions Group - Consistent with ChatItem */}
-      <div className="absolute right-2 top-3 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-all translate-x-2 group-hover:translate-x-0">
-          <button 
-            onClick={handleFollowUpClick}
-            className="w-7 h-7 rounded-full flex items-center justify-center bg-blue-500 text-white shadow-md hover:bg-blue-600 transition-all border border-blue-400"
-            title="Schedule Follow-up"
-          >
-            <i className="fas fa-phone-alt text-[10px]"></i>
-          </button>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="font-semibold text-[13px] text-[var(--text-primary)] truncate">{lead.name}</span>
+        </div>
+        <div className="text-[11px] text-[var(--text-secondary)] truncate leading-tight">{[visit.propertyOfInterest, (lead.initialInterest || []).join(', '), lead.budget].filter(Boolean).join(' · ') || leadSummary(lead)}</div>
+        {visit.notes && <div className="text-[11px] text-[var(--text-secondary)] opacity-80 truncate leading-tight italic">“{visit.notes}”</div>}
+        <div className="flex items-center justify-end gap-1 mt-1 min-h-[20px]">
+          {lead.phone && <button type="button" onClick={(e) => { e.stopPropagation(); callNumber(lead.phone); }} className="mr-auto w-6 h-6 rounded-full flex items-center justify-center bg-[var(--primary-color)] text-white hover:opacity-90" aria-label="Call" title="Call"><i className="fas fa-phone-alt text-[10px]" aria-hidden="true"></i></button>}
+          {(activeTab === 'Scheduled' || activeTab === 'Pending') && (
+            <>
+              <button onClick={handleCompleteClick} className={`${btn} bg-green-600 hover:bg-green-700`}>Mark done</button>
+              <button onClick={handleRescheduleClick} className={`${btn} bg-gray-600 hover:bg-gray-500`}>Reschedule</button>
+            </>
+          )}
+          {activeTab === 'Completed' && lead.bookingStatus !== 'Booked' && (
+            <>
+              <button onClick={handleTokenEntryClick} className={`${btn} bg-yellow-600 hover:bg-yellow-700`}>Take token</button>
+              <button onClick={handleBookingClick} className={`${btn} bg-purple-600 hover:bg-purple-700`}>Book</button>
+            </>
+          )}
+          {activeTab === 'Completed' && lead.bookingStatus === 'Booked' && (
+            <span className="px-2 py-0.5 text-[10px] rounded bg-green-800 text-green-100 font-semibold border border-green-700">Booked</span>
+          )}
+        </div>
       </div>
     </div>
   );

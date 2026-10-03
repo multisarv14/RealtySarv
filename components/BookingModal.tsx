@@ -4,6 +4,7 @@ import { Lead, Project, InventoryUnit, ParkingSlot, BookingDetails, Applicant, P
 import { v4 as uuidv4 } from 'uuid';
 import { defaultCustomerDocs } from '../constants';
 import DynamicFieldRenderer from './DynamicFieldRenderer';
+import { Modal, Button, inputCls, textareaCls } from './ui/Modal';
 
 interface BookingModalProps {
   isOpen: boolean;
@@ -18,13 +19,13 @@ interface BookingModalProps {
   formConfigs: FormFieldConfig[];
 }
 
-const FormField: React.FC<{label: string, id: string, value: string, onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => void, type?: string, required?: boolean, disabled?: boolean, children?: React.ReactNode}> = 
+const FormField: React.FC<{label: string, id: string, value: string, onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => void, type?: string, required?: boolean, disabled?: boolean, children?: React.ReactNode}> =
 ({ label, id, value, onChange, type = 'text', required = false, disabled = false, children }) => (
     <div>
-        <label htmlFor={id} className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
-            {label}
+        <label htmlFor={id} className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
+            {label}{required && <span className="text-red-500"> *</span>}
         </label>
-        {children || <input type={type} id={id} name={id} value={value} onChange={onChange} required={required} disabled={disabled} className="w-full p-2 rounded-md border border-[var(--light-bg)] bg-[var(--dark-bg)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary-color)] disabled:opacity-70 disabled:bg-[var(--light-bg)]" />}
+        {children || <input type={type} id={id} name={id} value={value} onChange={onChange} required={required} disabled={disabled} autoComplete="off" className={inputCls()} />}
     </div>
 );
 
@@ -139,7 +140,7 @@ const ApplicantForm: React.FC<{
             <FormField label="Aadhaar Card" id={`aadhaar-${applicant.id}`} value={applicant.aadhaar} onChange={e => onApplicantChange(applicant.id, 'aadhaar', e.target.value)} required />
          </div>
          <FormField label="Present Address" id={`presentAddress-${applicant.id}`} value={applicant.presentAddress} onChange={e => onApplicantChange(applicant.id, 'presentAddress', e.target.value)} required >
-            <textarea id={`presentAddress-${applicant.id}`} name={`presentAddress-${applicant.id}`} value={applicant.presentAddress} onChange={e => onApplicantChange(applicant.id, 'presentAddress', e.target.value)} required rows={2} className="w-full p-2 rounded-md border border-[var(--light-bg)] bg-[var(--dark-bg)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary-color)]" />
+            <textarea id={`presentAddress-${applicant.id}`} name={`presentAddress-${applicant.id}`} value={applicant.presentAddress} onChange={e => onApplicantChange(applicant.id, 'presentAddress', e.target.value)} required rows={2} className={inputCls()} />
          </FormField>
          <label className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
             <input type="checkbox" checked={applicant.isSameAddress} onChange={e => onApplicantChange(applicant.id, 'isSameAddress', e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-[var(--primary-color)] focus:ring-[var(--primary-color)] bg-[var(--dark-bg)]" />
@@ -147,11 +148,11 @@ const ApplicantForm: React.FC<{
          </label>
          {!applicant.isSameAddress && (
              <FormField label="Permanent Address" id={`permanentAddress-${applicant.id}`} value={applicant.permanentAddress} onChange={e => onApplicantChange(applicant.id, 'permanentAddress', e.target.value)} required>
-                <textarea id={`permanentAddress-${applicant.id}`} name={`permanentAddress-${applicant.id}`} value={applicant.permanentAddress} onChange={e => onApplicantChange(applicant.id, 'permanentAddress', e.target.value)} required rows={2} className="w-full p-2 rounded-md border border-[var(--light-bg)] bg-[var(--dark-bg)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary-color)]" />
+                <textarea id={`permanentAddress-${applicant.id}`} name={`permanentAddress-${applicant.id}`} value={applicant.permanentAddress} onChange={e => onApplicantChange(applicant.id, 'permanentAddress', e.target.value)} required rows={2} className={inputCls()} />
              </FormField>
          )}
          <div className="grid sm:grid-cols-2 gap-3">
-            <FormField label="Mobile Number" id={`mobile-${applicant.id}`} value={applicant.mobile} onChange={e => onApplicantChange(applicant.id, 'mobile', e.target.value)} type="tel" required />
+            <FormField label="Mobile number (hidden)" id={`mobile-${applicant.id}`} value={applicant.mobile} onChange={e => onApplicantChange(applicant.id, 'mobile', e.target.value)} type="password" required />
             <FormField label="Email ID" id={`email-${applicant.id}`} value={applicant.email} onChange={e => onApplicantChange(applicant.id, 'email', e.target.value)} type="email" required />
          </div>
          <div className="grid sm:grid-cols-2 gap-3">
@@ -168,6 +169,8 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onConfirmB
     const [calculationBasis, setCalculationBasis] = React.useState<CalculationBasis>('rate');
     const [isBasisLocked, setIsBasisLocked] = React.useState(false);
     const [costDetails, setCostDetails] = React.useState({ stampDuty: '', registration: '' });
+    const [formError, setFormError] = React.useState<string | null>(null);
+    const formRef = React.useRef<HTMLFormElement>(null);
     const [activeInput, setActiveInput] = React.useState<{ id: string; value: string } | null>(null);
 
     const hasInitialized = React.useRef(false);
@@ -349,7 +352,7 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onConfirmB
       }, [selectedUnit, financialSettings]);
 
     React.useEffect(() => {
-        const bookingId = isEditing ? bookingToEdit?.id : 'new';
+        const bookingId = isEditing ? bookingToEdit?.primaryApplicant?.id : 'new';
         if (isOpen && lead && project && (!hasInitialized.current || lastBookingId.current !== bookingId)) {
             if (isEditing && bookingToEdit) {
                 setBookingData(bookingToEdit);
@@ -539,13 +542,17 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onConfirmB
         setBookingData(prev => prev ? ({ ...prev, customData: { ...(prev.customData || {}), [field]: value } }) : null);
     }, []);
 
+    // Each step is checked with the browser's own required-field messages before moving on.
+    const stepIsValid = () => { setFormError(null); return formRef.current ? formRef.current.reportValidity() : true; };
+
     const nextStep = () => {
-        if (currentStep < steps.length - 1) {
+        if (currentStep < steps.length - 1 && stepIsValid()) {
             setCurrentStep(currentStep + 1);
         }
     };
     
     const prevStep = () => {
+        setFormError(null);
         if (currentStep > 0) {
             setCurrentStep(currentStep - 1);
         }
@@ -553,6 +560,8 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onConfirmB
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+        if (currentStep < steps.length - 1) { nextStep(); return; } // Enter inside a field moves to the next step
+        if (!stepIsValid()) return;
         if (lead && bookingData && bookingData.unitId && bookingData.parkingId) {
             const finalBookingData = { ...bookingData, declarationAccepted: true };
             if (isEditing && onUpdateBooking) {
@@ -561,7 +570,7 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onConfirmB
                 onConfirmBooking(lead.id, finalBookingData);
             }
         } else {
-            alert('Please complete all required fields and select a unit/parking before confirming.');
+            setFormError('Choose a unit and a parking slot (step 2) before confirming the booking.');
         }
     };
     
@@ -575,15 +584,39 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onConfirmB
     
     const totalPercentage = selectedPaymentPlan?.milestones.reduce((sum, m) => sum + m.percentage, 0) || 0;
     
+    const isLast = currentStep === steps.length - 1;
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50 p-4 animate-fadeIn" onClick={onClose}>
-            <div className="bg-[var(--medium-bg)] p-6 rounded-lg shadow-xl w-full max-w-5xl h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
-                <h3 className="text-xl sm:text-2xl font-semibold mb-1 text-[var(--text-primary)] text-center tracking-tight">
-                    {isEditing ? 'Edit Booking Details' : 'RERA Booking Form'} for {lead.name}
-                </h3>
-                <p className="text-center text-xs font-medium text-[var(--text-secondary)] mb-4 uppercase tracking-wider">Step {currentStep + 1} of {steps.length}: {stepLabels[currentStep]}</p>
-
-                <div className="flex-1 overflow-y-auto pr-2">
+        <Modal
+            isOpen={isOpen}
+            onClose={onClose}
+            size="4xl"
+            title={isEditing ? 'Edit booking' : 'Booking form'}
+            subtitle={`${lead.name} · ${project.name}`}
+            onSubmit={handleSubmit}
+            formRef={formRef}
+            nativeValidation
+            error={formError}
+            footer={
+                <div className="flex w-full items-center justify-between gap-3">
+                    <Button type="button" tone="ghost" onClick={onClose}>Cancel</Button>
+                    <div className="flex gap-2">
+                        {currentStep > 0 && <Button type="button" tone="ghost" onClick={prevStep}>Back</Button>}
+                        {isLast ? <Button type="submit" tone="success">{isEditing ? 'Save changes' : 'Confirm booking'}</Button> : <Button type="submit">Next</Button>}
+                    </div>
+                </div>
+            }
+        >
+            <ol className="flex items-center gap-1.5 overflow-x-auto no-scrollbar -mt-1" aria-label="Booking steps">
+                {stepLabels.map((label, i) => (
+                    <li key={label} className="flex items-center gap-1.5 shrink-0" aria-current={i === currentStep ? 'step' : undefined}>
+                        <span className={`px-2.5 py-1 rounded-full text-[11px] font-semibold ${i < currentStep ? 'bg-[var(--primary-color)]/15 text-[var(--primary-color)]' : i === currentStep ? 'bg-[var(--primary-color)] text-white' : 'bg-[var(--light-bg)] text-[var(--text-secondary)]'}`}>
+                            {i < currentStep ? <i className="fas fa-check mr-1 text-[9px]" aria-hidden="true"></i> : <span className="mr-1">{i + 1}.</span>}{label}
+                        </span>
+                        {i < stepLabels.length - 1 && <span className="w-3 h-px bg-[var(--border-color)]"></span>}
+                    </li>
+                ))}
+            </ol>
+            <div>
                     {steps[currentStep] === 'applicant' && (
                         <div className="space-y-6">
                             <fieldset className="border border-[var(--light-bg)] p-4 rounded-md">
@@ -604,7 +637,7 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onConfirmB
                     {steps[currentStep] === 'property' && (
                         <div className="space-y-4">
                              <FormField label="Select Unit" id="unitId" value={bookingData.unitId} onChange={e => handleSimpleChange('unitId', e.target.value)} required>
-                                <select id="unitId" name="unitId" value={bookingData.unitId} onChange={e => handleSimpleChange('unitId', e.target.value)} required className="w-full p-2 rounded-md border border-[var(--light-bg)] bg-[var(--dark-bg)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary-color)]">
+                                <select id="unitId" name="unitId" value={bookingData.unitId} onChange={e => handleSimpleChange('unitId', e.target.value)} required className={inputCls()}>
                                     <option value="" disabled>-- Choose a unit --</option>
                                     {currentlyBookedUnit && <option key={currentlyBookedUnit.id} value={currentlyBookedUnit.id}>{currentlyBookedUnit.unitNumber} - {currentlyBookedUnit.type} (Currently Selected)</option>}
                                     {availableUnits.map(unit => <option key={unit.id} value={unit.id}>{unit.unitNumber} - {unit.type} ({unit.area} sqft)</option>)}
@@ -612,7 +645,7 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onConfirmB
                              </FormField>
                              {selectedUnit && <div className="text-xs text-[var(--text-secondary)] bg-[var(--dark-bg)] p-2 rounded-md">Floor: {selectedUnit.floor}, Base Price: ₹{selectedUnit.price.toLocaleString('en-IN')}</div>}
                              <FormField label="Select Parking Slot" id="parkingId" value={bookingData.parkingId} onChange={e => handleSimpleChange('parkingId', e.target.value)} required>
-                                <select id="parkingId" name="parkingId" value={bookingData.parkingId} onChange={e => handleSimpleChange('parkingId', e.target.value)} required className="w-full p-2 rounded-md border border-[var(--light-bg)] bg-[var(--dark-bg)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary-color)]">
+                                <select id="parkingId" name="parkingId" value={bookingData.parkingId} onChange={e => handleSimpleChange('parkingId', e.target.value)} required className={inputCls()}>
                                     <option value="" disabled>-- Choose a parking slot --</option>
                                     {currentlyBookedParking && <option key={currentlyBookedParking.id} value={currentlyBookedParking.id}>{currentlyBookedParking.slotNumber} (Currently Selected)</option>}
                                     {availableParking.map(slot => <option key={slot.id} value={slot.id}>{slot.slotNumber} (Level: {slot.level})</option>)}
@@ -693,7 +726,7 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onConfirmB
                                     <div className="space-y-3 max-w-sm">
                                         <FormField label="Amount (INR)" id="tokenAmount" value={bookingData.tokenDetails.amount.toString()} onChange={e => handleTokenDetailsChange('amount', Number(e.target.value))} type="number" required />
                                         <FormField label="Payment Mode" id="tokenMode" value={bookingData.tokenDetails.mode} onChange={e => handleTokenDetailsChange('mode', e.target.value)}>
-                                            <select id="tokenMode" name="tokenMode" value={bookingData.tokenDetails.mode} onChange={e => handleTokenDetailsChange('mode', e.target.value)} className="w-full p-2 rounded-md border border-[var(--light-bg)] bg-[var(--dark-bg)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary-color)]"><option>NEFT</option><option>RTGS</option><option>Cheque</option><option>UPI</option><option>Other</option></select>
+                                            <select id="tokenMode" name="tokenMode" value={bookingData.tokenDetails.mode} onChange={e => handleTokenDetailsChange('mode', e.target.value)} className={inputCls()}><option>NEFT</option><option>RTGS</option><option>Cheque</option><option>UPI</option><option>Other</option></select>
                                         </FormField>
                                         <FormField label="Transaction/Cheque No." id="transactionId" value={bookingData.tokenDetails.transactionId} onChange={e => handleTokenDetailsChange('transactionId', e.target.value)} required />
                                         <FormField label="Bank Name" id="bankName" value={bookingData.tokenDetails.bankName} onChange={e => handleTokenDetailsChange('bankName', e.target.value)} required />
@@ -736,7 +769,7 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onConfirmB
                                 <h4 className="font-semibold text-[var(--text-primary)] mb-2">Select Payment Plan</h4>
                                 {projectPaymentPlans.length > 0 ? (
                                     <FormField label="" id="paymentPlanId" value={bookingData.paymentPlanId} onChange={e => handleSimpleChange('paymentPlanId', e.target.value)} required>
-                                        <select id="paymentPlanId" name="paymentPlanId" value={bookingData.paymentPlanId} onChange={e => handleSimpleChange('paymentPlanId', e.target.value)} required className="w-full p-2 rounded-md border border-[var(--light-bg)] bg-[var(--dark-bg)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary-color)]">
+                                        <select id="paymentPlanId" name="paymentPlanId" value={bookingData.paymentPlanId} onChange={e => handleSimpleChange('paymentPlanId', e.target.value)} required className={inputCls()}>
                                             {projectPaymentPlans.map(plan => <option key={plan.id} value={plan.id}>{plan.name}</option>)}
                                         </select>
                                     </FormField>
@@ -828,24 +861,7 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onConfirmB
                         </div>
                     )}
                 </div>
-
-                <div className="mt-6 pt-4 border-t border-[var(--light-bg)] flex justify-between items-center gap-4">
-                    <button type="button" onClick={onClose} className="px-5 py-2 rounded-md bg-gray-700 text-[var(--text-primary)] font-medium hover:bg-gray-600 transition-colors">Cancel</button>
-                    <div className="flex gap-3">
-                        {currentStep > 0 && 
-                            <button type="button" onClick={prevStep} className="px-5 py-2 rounded-md bg-gray-600 text-white font-medium hover:bg-gray-500 transition-colors">Back</button>
-                        }
-                        {currentStep < steps.length - 1 ? (
-                            <button type="button" onClick={nextStep} className="px-5 py-2 rounded-md bg-[var(--primary-color)] text-white font-medium hover:bg-[#128c7e] transition-colors">Next</button>
-                        ) : (
-                            <button type="button" onClick={handleSubmit} className="px-5 py-2 rounded-md bg-green-600 text-white font-medium hover:bg-green-700 transition-colors">
-                                {isEditing ? 'Save Changes' : 'Confirm Booking'}
-                            </button>
-                        )}
-                    </div>
-                </div>
-            </div>
-        </div>
+        </Modal>
     );
 };
 

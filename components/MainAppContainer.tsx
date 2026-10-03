@@ -12,6 +12,7 @@ import AtsLineupModal from './modals/AtsLineupModal';
 import RegistrationDetailsModal from './modals/RegistrationDetailsModal';
 import ExecutionDetailsModal from './modals/ExecutionDetailsModal';
 import { v4 as uuidv4 } from 'uuid';
+import { Toaster } from './ui/Toast';
 
 type ActiveMenu = 'Leads' | 'Visits' | 'Booking' | 'Agreement' | 'Possession';
 type ContentTab = 'chat' | 'history' | 'details' | 'siteVisit' | 'booking' | 'ledger' | 'documents';
@@ -36,6 +37,7 @@ interface MainAppContainerProps {
   onUpdateTaskStatus: (leadId: string, taskId: string, newStatus: TaskStatus) => void;
   onUpdateLeadLifecycle: (leadId: string, stage: LifecycleStage, newStatus: LeadLifecycleStatus) => void;
   onUpdateLeadOwner: (leadId: string, ownerId: string) => void;
+  currentUser?: User | null;
 }
 
 const MainAppContainer: React.FC<MainAppContainerProps> = ({
@@ -58,6 +60,7 @@ const MainAppContainer: React.FC<MainAppContainerProps> = ({
   onUpdateTaskStatus,
   onUpdateLeadLifecycle,
   onUpdateLeadOwner,
+  currentUser,
 }) => {
   const [selectedLeadId, setSelectedLeadId] = React.useState<string | null>(
     leads.length > 0 ? leads[0].id : null
@@ -188,7 +191,7 @@ const MainAppContainer: React.FC<MainAppContainerProps> = ({
       channelSource: leadData.channelSource,
       leadSource: leadData.sourceName,
       propertyImages: [],
-      ownerId: users.find(u => u.role === 'Sales')?.id || users[0]?.id || '',
+      ownerId: leadData.ownerId || currentUser?.id || users.find(u => u.role === 'Sales')?.id || users[0]?.id || '',
       leadProject: leadData.leadProject || 'Not Assigned',
       leadDate: new Date().toISOString().split('T')[0],
       bookingStatus: 'Pending',
@@ -197,7 +200,7 @@ const MainAppContainer: React.FC<MainAppContainerProps> = ({
       customData: {},
     };
     onLeadsUpdate([...leads, newLead]);
-  }, [leads, onLeadsUpdate, users]);
+  }, [leads, onLeadsUpdate, users, currentUser]);
 
   const handleUpdateLead = React.useCallback((updatedLeadData: Lead) => {
     const updatedLeads = leads.map(lead => lead.id === updatedLeadData.id ? updatedLeadData : lead);
@@ -260,17 +263,34 @@ const MainAppContainer: React.FC<MainAppContainerProps> = ({
   const handleToggleEditBookingModal = React.useCallback((leadId: string) => { setBookingLeadId(leadId); setIsEditingBooking(true); setShowBookingModal(true); }, []);
   const handleCloseBookingModal = React.useCallback(() => { setShowBookingModal(false); setBookingLeadId(null); }, []);
 
+  // Keep the project's inventory in step with bookings so a unit or parking slot can't be sold twice.
+  const syncInventory = React.useCallback((lead: Lead, next: BookingDetails, previous?: BookingDetails) => {
+    const project = projects.find(p => p.name === lead.leadProject);
+    if (!project) return;
+    const release = (id?: string) => id && id !== next.unitId && id !== next.parkingId;
+    const inventory = project.inventory.map(u => u.id === next.unitId ? { ...u, status: 'Booked' as const } : release(previous?.unitId) && u.id === previous?.unitId ? { ...u, status: 'Available' as const } : u);
+    const parkingInventory = project.parkingInventory.map(s => s.id === next.parkingId ? { ...s, status: 'Booked' as const, assignedUnitId: next.unitId } : release(previous?.parkingId) && s.id === previous?.parkingId ? { ...s, status: 'Available' as const, assignedUnitId: undefined } : s);
+    const changed = JSON.stringify(inventory) !== JSON.stringify(project.inventory) || JSON.stringify(parkingInventory) !== JSON.stringify(project.parkingInventory);
+    if (changed) onProjectsUpdate([{ ...project, inventory, parkingInventory }]);
+  }, [projects, onProjectsUpdate]);
+
   const handleConfirmBooking = React.useCallback((leadId: string, bookingDetails: BookingDetails) => {
-    const updatedLeads = leads.map(lead => lead.id === leadId ? { ...lead, bookingStatus: 'Booked' as const, bookingDetails } : lead);
+    const lead = leads.find(l => l.id === leadId);
+    if (lead) syncInventory(lead, bookingDetails);
+    const updatedLeads = leads.map(l => l.id === leadId ? { ...l, bookingStatus: 'Booked' as const, bookingDetails } : l);
     onLeadsUpdate(updatedLeads);
     handleCloseBookingModal();
-  }, [leads, onLeadsUpdate, handleCloseBookingModal]);
+  }, [leads, onLeadsUpdate, handleCloseBookingModal, syncInventory]);
   
   const handleUpdateBooking = React.useCallback((leadId: string, updatedBookingDetails: BookingDetails, closeModal: boolean = true) => {
-    const updatedLeads = leads.map(lead => lead.id === leadId ? { ...lead, bookingDetails: updatedBookingDetails } : lead);
+    const lead = leads.find(l => l.id === leadId);
+    if (lead && lead.bookingDetails && (lead.bookingDetails.unitId !== updatedBookingDetails.unitId || lead.bookingDetails.parkingId !== updatedBookingDetails.parkingId)) {
+      syncInventory(lead, updatedBookingDetails, lead.bookingDetails); // a different unit was chosen: free the old one
+    }
+    const updatedLeads = leads.map(l => l.id === leadId ? { ...l, bookingDetails: updatedBookingDetails } : l);
     onLeadsUpdate(updatedLeads);
     if (closeModal) handleCloseBookingModal();
-  }, [leads, onLeadsUpdate, handleCloseBookingModal]);
+  }, [leads, onLeadsUpdate, handleCloseBookingModal, syncInventory]);
 
   const handleToggleTokenEntryModal = React.useCallback((leadId: string) => { setTokenEntryLeadId(leadId); setShowTokenEntryModal(true); }, []);
   const handleConfirmToken = React.useCallback((leadId: string, tokenAmount: number) => {
@@ -331,7 +351,7 @@ const MainAppContainer: React.FC<MainAppContainerProps> = ({
 
   return (
     <div className="flex h-full w-full relative">
-      <div className={`w-full flex-shrink-0 md:w-1/3 md:flex ${isMainContentVisible ? 'hidden' : 'flex'}`}>
+      <div className={`w-full flex-shrink-0 md:w-[clamp(300px,27vw,400px)] md:flex ${isMainContentVisible ? 'hidden' : 'flex'}`}>
         <Sidebar 
             leads={leads} 
             users={users} 
@@ -347,6 +367,8 @@ const MainAppContainer: React.FC<MainAppContainerProps> = ({
             onToggleTokenEntryModal={handleToggleTokenEntryModal}
             onUpdateLeadLifecycle={onUpdateLeadLifecycle}
             onUpdateLeadCustomData={handleUpdateLeadCustomData}
+            currentUser={currentUser}
+            onClearSelection={() => setSelectedLeadId(null)}
             onSwitchTab={handleSwitchTab}
             onOpenAtsLineup={handleOpenAtsLineupModal}
             onOpenRegDetails={handleOpenRegDetailsModal}
@@ -362,6 +384,7 @@ const MainAppContainer: React.FC<MainAppContainerProps> = ({
             onSendMessage={handleSendMessage} 
             onBackButtonClick={handleBackButtonClick} 
             onToggleFollowUpModal={() => handleToggleFollowUpModal('Leads')} 
+            onToggleSiteVisitModal={() => handleToggleSiteVisitModal()} 
             onToggleEditLeadModal={handleToggleEditLeadModal} 
             onToggleBookingModal={handleToggleBookingModal} 
             onToggleEditBookingModal={handleToggleEditBookingModal} 
@@ -380,9 +403,18 @@ const MainAppContainer: React.FC<MainAppContainerProps> = ({
         />
       </div>
 
-      <LeadModal isOpen={showLeadModal} onClose={handleCloseLeadModal} onAddLead={handleAddLead} onUpdateLead={handleUpdateLead} leadToEdit={leadToEdit} unitTypes={unitTypes} locationSettings={locationSettings} sources={sources} budgets={budgets} clientProfiles={clientProfiles} livingPlaces={livingPlaces} projects={projects} formConfigs={formConfigs} users={users} />
-      <SiteVisitModal isOpen={showSiteVisitModal} onClose={() => setShowSiteVisitModal(false)} onAddVisit={handleSaveSiteVisit} visitToEdit={editingVisit} />
-      <FollowUpModal isOpen={showFollowUpModal} onClose={() => setShowFollowUpModal(false)} onAddFollowUp={handleAddFollowUp} users={users} context={followUpContext} />
+      <Toaster />
+      <LeadModal isOpen={showLeadModal} onClose={handleCloseLeadModal} onAddLead={handleAddLead} onUpdateLead={handleUpdateLead} leadToEdit={leadToEdit} unitTypes={unitTypes} locationSettings={locationSettings} sources={sources} budgets={budgets} clientProfiles={clientProfiles} livingPlaces={livingPlaces} projects={projects} formConfigs={formConfigs} users={users} currentUserId={currentUser?.id} />
+      <SiteVisitModal
+        isOpen={showSiteVisitModal}
+        onClose={() => setShowSiteVisitModal(false)}
+        onAddVisit={handleSaveSiteVisit}
+        visitToEdit={editingVisit}
+        leadName={(editingVisit ? leads.find(l => l.id === editingVisit.leadId) : selectedLead)?.name}
+        defaultProperty={selectedLead?.leadProject && selectedLead.leadProject !== 'Not Assigned' ? selectedLead.leadProject : undefined}
+        projectNames={projects.map(p => p.name)}
+      />
+      <FollowUpModal isOpen={showFollowUpModal} onClose={() => setShowFollowUpModal(false)} onAddFollowUp={handleAddFollowUp} users={users} context={followUpContext} leadName={selectedLead?.name} defaultAssignee={currentUser?.name} />
       <BookingModal isOpen={showBookingModal} onClose={handleCloseBookingModal} onConfirmBooking={handleConfirmBooking} onUpdateBooking={handleUpdateBooking} lead={bookingLead} bookingToEdit={isEditingBooking ? bookingLead?.bookingDetails : null} project={bookingProject} paymentPlans={paymentPlans} financialSettings={financialSettings} formConfigs={formConfigs} />
       <TokenEntryModal isOpen={showTokenEntryModal} onClose={() => setShowTokenEntryModal(false)} onConfirmToken={handleConfirmToken} lead={tokenEntryLead} />
       

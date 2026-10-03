@@ -1,5 +1,5 @@
-
 import React from 'react';
+import { Modal, Button } from '../ui/Modal';
 
 interface DocumentPreviewModalProps {
   isOpen: boolean;
@@ -10,49 +10,24 @@ interface DocumentPreviewModalProps {
 }
 
 const DocumentPreviewModal: React.FC<DocumentPreviewModalProps> = ({ isOpen, onClose, docName, fileName, fileUrl }) => {
-  if (!isOpen) return null;
-
   const isImage = fileUrl.startsWith('data:image/');
-
   return (
-    <div
-      className="fixed inset-0 bg-black bg-opacity-80 flex justify-center items-center z-50 p-4 animate-fadeIn"
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="previewModalTitle"
-    >
-      <div
-        className="bg-[var(--medium-bg)] rounded-lg shadow-xl w-full max-w-4xl h-[90vh] flex flex-col"
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="flex justify-between items-center p-4 border-b border-[var(--light-bg)]">
-          <h3 id="previewModalTitle" className="text-lg font-semibold text-[var(--text-primary)]">
-            Preview: {docName} <span className="text-sm font-normal text-[var(--text-secondary)]">- {fileName}</span>
-          </h3>
-          <button onClick={onClose} className="p-2 rounded-full hover:bg-[var(--light-bg)]">
-            <i className="fas fa-times text-[var(--text-secondary)]"></i>
-          </button>
-        </div>
-        <div className="flex-1 p-4 flex items-center justify-center bg-[var(--dark-bg)] overflow-auto">
-          {isImage ? (
-            <img src={fileUrl} alt={`Preview of ${fileName}`} className="max-w-full max-h-full object-contain" />
-          ) : (
-            <object data={fileUrl} type="application/pdf" className="w-full h-full">
-                <div className="text-center text-[var(--text-secondary)]">
-                    <i className="fas fa-exclamation-triangle text-6xl mb-4 text-yellow-500"></i>
-                    <p>Unable to display preview.</p>
-                    <p className="font-semibold text-[var(--text-primary)] mt-1">{fileName}</p>
-                    <p className="text-xs mt-4">Your browser may not support embedding this file type.</p>
-                    <a href={fileUrl} download={fileName} className="mt-4 inline-block px-4 py-2 rounded-md bg-[var(--primary-color)] text-white font-medium hover:bg-[#128c7e] transition-colors">
-                        Download File
-                    </a>
-                </div>
-            </object>
-          )}
-        </div>
+    <Modal isOpen={isOpen} onClose={onClose} size="4xl" title={docName} subtitle={fileName}
+      footer={<><a href={fileUrl} download={fileName} className="h-10 px-4 rounded-lg text-sm font-semibold inline-flex items-center gap-2 text-[var(--text-secondary)] hover:bg-[var(--light-bg)]"><i className="fas fa-download" aria-hidden="true"></i>Download</a><Button type="button" onClick={onClose}>Close</Button></>}>
+      <div className="h-[62vh] -m-1 rounded-lg bg-[var(--dark-bg)] border border-[var(--border-color)] flex items-center justify-center overflow-auto">
+        {isImage ? (
+          <img src={fileUrl} alt={`Preview of ${fileName}`} className="max-w-full max-h-full object-contain" />
+        ) : (
+          <object data={fileUrl} type="application/pdf" className="w-full h-full">
+            <div className="text-center text-[var(--text-secondary)] p-6">
+              <i className="fas fa-exclamation-triangle text-4xl mb-3 text-yellow-500" aria-hidden="true"></i>
+              <p>This file can’t be previewed in your browser.</p>
+              <p className="text-xs mt-1">Use Download to open it.</p>
+            </div>
+          </object>
+        )}
       </div>
-    </div>
+    </Modal>
   );
 };
 

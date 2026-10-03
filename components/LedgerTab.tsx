@@ -1,5 +1,6 @@
 
 import React from 'react';
+import { toast } from './ui/Toast';
 import { Lead, Project, PaymentPlan, BookingDetails, PaymentRecord, DemandRecord } from '../types';
 import AddPaymentModal from './modals/AddPaymentModal';
 import GenerateDemandModal from './modals/GenerateDemandModal';
@@ -90,7 +91,7 @@ const LedgerTab: React.FC<LedgerTabProps> = ({ lead, project, paymentPlans, onUp
           settlementMapping: tempSettlement
       };
       onUpdateBooking(lead.id, updatedBookingDetails);
-      alert("Settlement updated!");
+      toast.success("Settlement updated.");
   };
 
   const handleSettlementChange = (key: string, value: string) => {

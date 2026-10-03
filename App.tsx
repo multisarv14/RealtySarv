@@ -169,8 +169,12 @@ const App: React.FC = () => {
     setViewState('authenticated');
   };
 
+  // The CRM hands us the whole list after every action. Save only the leads that changed, so an
+  // open (possibly stale) page can't write old copies of everyone else's leads back to the database.
   const handleLeadsUpdate = async (updatedLeads: Lead[]) => {
-    await db.leads.bulkPut(updatedLeads);
+    const before = new Map((leads || []).map((l) => [l.id, JSON.stringify(l)]));
+    const changed = updatedLeads.filter((l) => before.get(l.id) !== JSON.stringify(l));
+    if (changed.length) await db.leads.bulkPut(changed);
   };
 
   const handleUsersUpdate = async (updatedUsers: User[]) => {
@@ -251,6 +255,7 @@ const App: React.FC = () => {
     if (currentAppView === 'main') {
       return (
         <MainAppContainer
+          currentUser={currentUser}
           leads={leads}
           users={users}
           projects={projects}

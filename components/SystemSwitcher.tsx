@@ -14,11 +14,11 @@ interface SystemSwitcherProps {
 const SystemSwitcher: React.FC<SystemSwitcherProps> = ({ activeSystem, onSwitch, onGoToAdmin, currentAppView, lockedSystems = [] }) => {
   const locked = (sys: SystemType) => lockedSystems.includes(sys);
   return (
-    <div className="bg-[var(--dark-bg)] border-b border-[var(--light-bg)] px-4 h-12 flex items-center justify-between z-50 flex-shrink-0 shadow-lg">
+    <div className="bg-[var(--dark-bg)] border-b border-[var(--light-bg)] px-3 h-10 flex items-center justify-between z-50 flex-shrink-0 shadow-lg">
       <div className="flex items-center gap-1 h-full">
         <button 
           onClick={() => onSwitch('LeadSarv')}
-          className={`h-full px-5 flex items-center gap-2 transition-all border-b-2 relative group ${
+          className={`h-full px-4 flex items-center gap-2 transition-all border-b-2 relative group ${
             activeSystem === 'LeadSarv' 
             ? 'border-[#00a884] text-[#00a884] bg-[#00a884]/5 font-bold' 
             : 'border-transparent text-[var(--text-secondary)] hover:text-[#00a884] hover:bg-[#00a884]/5'
@@ -27,7 +27,7 @@ const SystemSwitcher: React.FC<SystemSwitcherProps> = ({ activeSystem, onSwitch,
           <div className={`w-6 h-6 rounded flex items-center justify-center transition-colors ${activeSystem === 'LeadSarv' ? 'bg-[#00a884] text-white' : 'bg-gray-700 text-gray-400 group-hover:bg-gray-600'}`}>
             <i className="fas fa-users-rays text-[10px]"></i>
           </div>
-          <span className="text-[11px] uppercase tracking-widest flex items-center">
+          <span className="text-[11px] uppercase tracking-widest hidden sm:flex items-center">
             <span className="font-bold">Lead</span><span className="font-light opacity-80">Sarv</span>
           </span>
           {activeSystem === 'LeadSarv' && <div className="absolute -bottom-[2px] left-0 right-0 h-[2px] bg-[#00a884] shadow-[0_0_12px_#00a884]"></div>}
@@ -37,7 +37,7 @@ const SystemSwitcher: React.FC<SystemSwitcherProps> = ({ activeSystem, onSwitch,
           onClick={() => !locked('ProjectSarv') && onSwitch('ProjectSarv')}
           disabled={locked('ProjectSarv')}
           title={locked('ProjectSarv') ? 'Included in the Ultimate Stack plan' : undefined}
-          className={`h-full px-5 flex items-center gap-2 transition-all border-b-2 relative group ${locked('ProjectSarv') ? 'opacity-50 cursor-not-allowed ' : ''}${
+          className={`h-full px-4 flex items-center gap-2 transition-all border-b-2 relative group ${locked('ProjectSarv') ? 'opacity-50 cursor-not-allowed ' : ''}${
             activeSystem === 'ProjectSarv' 
             ? 'border-[#3b82f6] text-[#3b82f6] bg-[#3b82f6]/5 font-bold' 
             : 'border-transparent text-[var(--text-secondary)] hover:text-[#3b82f6] hover:bg-[#3b82f6]/5'
@@ -46,7 +46,7 @@ const SystemSwitcher: React.FC<SystemSwitcherProps> = ({ activeSystem, onSwitch,
           <div className={`w-6 h-6 rounded flex items-center justify-center transition-colors ${activeSystem === 'ProjectSarv' ? 'bg-[#3b82f6] text-white' : 'bg-gray-700 text-gray-400 group-hover:bg-gray-600'}`}>
             <i className="fas fa-hard-hat text-[10px]"></i>
           </div>
-          <span className="text-[11px] uppercase tracking-widest flex items-center">
+          <span className="text-[11px] uppercase tracking-widest hidden sm:flex items-center">
             <span className="font-bold">Project</span><span className="font-light opacity-80">Sarv</span>
           </span>
           {locked('ProjectSarv') && <i className="fas fa-lock text-[10px] opacity-70" aria-hidden="true"></i>}
@@ -57,7 +57,7 @@ const SystemSwitcher: React.FC<SystemSwitcherProps> = ({ activeSystem, onSwitch,
           onClick={() => !locked('FinanceSarv') && onSwitch('FinanceSarv')}
           disabled={locked('FinanceSarv')}
           title={locked('FinanceSarv') ? 'Included in the Ultimate Stack plan' : undefined}
-          className={`h-full px-5 flex items-center gap-2 transition-all border-b-2 relative group ${locked('FinanceSarv') ? 'opacity-50 cursor-not-allowed ' : ''}${
+          className={`h-full px-4 flex items-center gap-2 transition-all border-b-2 relative group ${locked('FinanceSarv') ? 'opacity-50 cursor-not-allowed ' : ''}${
             activeSystem === 'FinanceSarv' 
             ? 'border-[#6366f1] text-[#6366f1] bg-[#6366f1]/5 font-bold' 
             : 'border-transparent text-[var(--text-secondary)] hover:text-[#6366f1] hover:bg-[#6366f1]/5'
@@ -66,7 +66,7 @@ const SystemSwitcher: React.FC<SystemSwitcherProps> = ({ activeSystem, onSwitch,
           <div className={`w-6 h-6 rounded flex items-center justify-center transition-colors ${activeSystem === 'FinanceSarv' ? 'bg-[#6366f1] text-white' : 'bg-gray-700 text-gray-400 group-hover:bg-gray-600'}`}>
             <i className="fas fa-coins text-[10px]"></i>
           </div>
-          <span className="text-[11px] uppercase tracking-widest flex items-center">
+          <span className="text-[11px] uppercase tracking-widest hidden sm:flex items-center">
             <span className="font-bold">Finance</span><span className="font-light opacity-80">Sarv</span>
           </span>
           {locked('FinanceSarv') && <i className="fas fa-lock text-[10px] opacity-70" aria-hidden="true"></i>}

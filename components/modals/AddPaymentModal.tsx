@@ -1,7 +1,8 @@
-
 import React from 'react';
 import { PaymentRecord, PaymentPlanMilestone } from '../../types';
 import { v4 as uuidv4 } from 'uuid';
+import { Modal, Field, inputCls, textareaCls } from '../ui/Modal';
+import { todayISO } from '../leadUi';
 
 interface AddPaymentModalProps {
   isOpen: boolean;
@@ -10,105 +11,53 @@ interface AddPaymentModalProps {
   milestones: PaymentPlanMilestone[];
 }
 
+const MODES = ['NEFT', 'RTGS', 'UPI', 'Cheque', 'Cash', 'Other'];
+
 const AddPaymentModal: React.FC<AddPaymentModalProps> = ({ isOpen, onClose, onSave, milestones }) => {
   const [amount, setAmount] = React.useState('');
-  const [date, setDate] = React.useState(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = React.useState('');
   const [mode, setMode] = React.useState('NEFT');
   const [transactionId, setTransactionId] = React.useState('');
   const [bankName, setBankName] = React.useState('');
   const [milestoneName, setMilestoneName] = React.useState('');
   const [notes, setNotes] = React.useState('');
+  const [submitted, setSubmitted] = React.useState(false);
 
   React.useEffect(() => {
-      if (isOpen) {
-          setAmount('');
-          setDate(new Date().toISOString().split('T')[0]);
-          setMode('NEFT');
-          setTransactionId('');
-          setBankName('');
-          setMilestoneName('');
-          setNotes('');
-      }
+    if (!isOpen) return;
+    setAmount(''); setDate(todayISO()); setMode('NEFT'); setTransactionId(''); setBankName(''); setMilestoneName(''); setNotes(''); setSubmitted(false);
   }, [isOpen]);
 
+  const value = parseFloat(amount);
+  const amountErr = submitted && !(value > 0) ? 'Enter the amount received.' : null;
+  const dateErr = submitted && !date ? 'Pick the payment date.' : null;
+
   const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!amount || !date || !mode) {
-        alert("Please fill in required fields.");
-        return;
-    }
-
-    const payment: PaymentRecord = {
-        id: uuidv4(),
-        amount: parseFloat(amount),
-        date,
-        mode,
-        transactionId,
-        bankName,
-        milestoneName: milestoneName || undefined,
-        notes
-    };
-
-    onSave(payment);
+    e.preventDefault(); setSubmitted(true);
+    if (!(value > 0) || !date) return;
+    onSave({ id: uuidv4(), amount: value, date, mode, transactionId: transactionId.trim(), bankName: bankName.trim(), milestoneName: milestoneName || undefined, notes: notes.trim() });
     onClose();
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50 animate-fadeIn" onClick={onClose}>
-        <div className="bg-[var(--medium-bg)] p-6 rounded-lg shadow-xl w-11/12 max-w-lg" onClick={e => e.stopPropagation()}>
-            <h3 className="text-xl font-bold text-[var(--text-primary)] mb-4">Record Payment</h3>
-            <form onSubmit={handleSubmit} className="space-y-4">
-                <div>
-                    <label className="block text-sm text-[var(--text-secondary)] mb-1">Amount</label>
-                    <input type="number" value={amount} onChange={e => setAmount(e.target.value)} className="w-full p-2 rounded bg-[var(--dark-bg)] text-[var(--text-primary)] border border-[var(--light-bg)]" required />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                    <div>
-                        <label className="block text-sm text-[var(--text-secondary)] mb-1">Date</label>
-                        <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full p-2 rounded bg-[var(--dark-bg)] text-[var(--text-primary)] border border-[var(--light-bg)]" required />
-                    </div>
-                    <div>
-                        <label className="block text-sm text-[var(--text-secondary)] mb-1">Mode</label>
-                        <select value={mode} onChange={e => setMode(e.target.value)} className="w-full p-2 rounded bg-[var(--dark-bg)] text-[var(--text-primary)] border border-[var(--light-bg)]">
-                            <option value="NEFT">NEFT</option>
-                            <option value="RTGS">RTGS</option>
-                            <option value="UPI">UPI</option>
-                            <option value="Cheque">Cheque</option>
-                            <option value="Cash">Cash</option>
-                            <option value="Other">Other</option>
-                        </select>
-                    </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                    <div>
-                        <label className="block text-sm text-[var(--text-secondary)] mb-1">Transaction ID / Cheque No.</label>
-                        <input type="text" value={transactionId} onChange={e => setTransactionId(e.target.value)} className="w-full p-2 rounded bg-[var(--dark-bg)] text-[var(--text-primary)] border border-[var(--light-bg)]" />
-                    </div>
-                    <div>
-                        <label className="block text-sm text-[var(--text-secondary)] mb-1">Bank Name</label>
-                        <input type="text" value={bankName} onChange={e => setBankName(e.target.value)} className="w-full p-2 rounded bg-[var(--dark-bg)] text-[var(--text-primary)] border border-[var(--light-bg)]" />
-                    </div>
-                </div>
-                <div>
-                    <label className="block text-sm text-[var(--text-secondary)] mb-1">Against Milestone (Optional)</label>
-                    <select value={milestoneName} onChange={e => setMilestoneName(e.target.value)} className="w-full p-2 rounded bg-[var(--dark-bg)] text-[var(--text-primary)] border border-[var(--light-bg)]">
-                        <option value="">-- Select Milestone --</option>
-                        {milestones.map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
-                    </select>
-                </div>
-                <div>
-                    <label className="block text-sm text-[var(--text-secondary)] mb-1">Notes</label>
-                    <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} className="w-full p-2 rounded bg-[var(--dark-bg)] text-[var(--text-primary)] border border-[var(--light-bg)] resize-none"></textarea>
-                </div>
-                <div className="flex justify-end gap-3 mt-6">
-                    <button type="button" onClick={onClose} className="px-4 py-2 rounded text-[var(--text-secondary)] hover:bg-[var(--light-bg)]">Cancel</button>
-                    <button type="submit" className="px-4 py-2 rounded bg-[var(--primary-color)] text-white hover:opacity-90">Add Payment</button>
-                </div>
-            </form>
-        </div>
-    </div>
+    <Modal isOpen={isOpen} onClose={onClose} size="lg" title="Record payment" subtitle="Add a receipt against this booking" onSubmit={handleSubmit} submitLabel="Add payment">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3.5">
+        <Field label="Amount received" htmlFor="payAmount" required error={amountErr} hint={value > 0 ? `₹ ${value.toLocaleString('en-IN')}` : undefined}>
+          <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[var(--text-secondary)]" aria-hidden="true">₹</span>
+            <input id="payAmount" type="number" inputMode="numeric" min={1} value={amount} onChange={e => setAmount(e.target.value)} className={`${inputCls(!!amountErr)} pl-7`} aria-invalid={!!amountErr} /></div>
+        </Field>
+        <Field label="Date" htmlFor="payDate" required error={dateErr}><input id="payDate" type="date" max={todayISO()} value={date} onChange={e => setDate(e.target.value)} className={inputCls(!!dateErr)} aria-invalid={!!dateErr} /></Field>
+        <Field label="Mode" htmlFor="payMode"><select id="payMode" value={mode} onChange={e => setMode(e.target.value)} className={inputCls()}>{MODES.map(m => <option key={m} value={m}>{m}</option>)}</select></Field>
+        <Field label="Transaction ID / cheque no." htmlFor="payTxn"><input id="payTxn" value={transactionId} onChange={e => setTransactionId(e.target.value)} className={inputCls()} /></Field>
+        <Field label="Bank" htmlFor="payBank"><input id="payBank" value={bankName} onChange={e => setBankName(e.target.value)} className={inputCls()} /></Field>
+        <Field label="Against milestone" htmlFor="payMilestone" hint="Optional">
+          <select id="payMilestone" value={milestoneName} onChange={e => setMilestoneName(e.target.value)} className={inputCls()}>
+            <option value="">None</option>{milestones.map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
+          </select>
+        </Field>
+      </div>
+      <Field label="Notes" htmlFor="payNotes"><textarea id="payNotes" value={notes} onChange={e => setNotes(e.target.value)} rows={2} className={textareaCls()} /></Field>
+    </Modal>
   );
 };
 

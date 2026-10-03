@@ -1,7 +1,9 @@
 
 import React from 'react';
+import { toast } from './ui/Toast';
 import { Lead, Project, CustomerDocument, Applicant, LifecycleStage, LeadLifecycleStatus } from '../types';
 import DocumentPreviewModal from './modals/DocumentPreviewModal';
+import { Modal, Button } from './ui/Modal';
 import UnitDocumentViewerModal, { UnitDocTemplate } from './modals/UnitDocumentViewerModal';
 
 interface DocumentHubProps {
@@ -159,7 +161,7 @@ const CustomerDocumentsTab: React.FC<{ lead: Lead; onUpdate: DocumentHubProps['o
         if (doc.fileName && doc.fileUrl) {
             setPreviewingDoc({ docName, fileName: doc.fileName, fileUrl: doc.fileUrl });
         } else {
-            alert("Preview is not available for this document. Please upload the file first.");
+            toast.info("Upload the file first, then you can preview it.");
         }
     };
 
@@ -288,12 +290,12 @@ const UnitDocumentsTab: React.FC<{ lead: Lead; project: Project | null; onUpdate
         if (docName === 'Agreement Draft') {
             if (agreementStatus === 'Drafted') {
                 if (verifiedKycCount < 4) {
-                    alert("KYC Verification required: Please verify at least 4 documents for the primary applicant first.");
+                    toast.error("Verify at least 4 KYC documents for the primary applicant first.");
                 } else if (!customData.agreementDraftGenerated) {
-                    alert("Generating draft...");
+                    toast.success("Agreement draft is ready. Open it again to view and print.");
                     onUpdateCustomData?.(lead.id, { agreementDraftGenerated: true });
                 } else {
-                    alert("Sending agreement to customer via WhatsApp and Email...");
+                    toast.success("Moved to the Signature stage. Share the draft with the customer yourself; automatic Email/WhatsApp sending isn't set up yet.");
                     onUpdateLifecycle?.(lead.id, 'agreementStatus', 'Signature');
                 }
             } else {
@@ -341,17 +343,15 @@ const UnitDocumentsTab: React.FC<{ lead: Lead; project: Project | null; onUpdate
         }
     };
 
-    const handleScheduleATS = () => {
-        const confirmed = window.confirm("The signed agreement has been verified. Move to ATS (Agreement to Sell) stage?");
-        if (confirmed) onUpdateLifecycle?.(lead.id, 'agreementStatus', 'ATS');
-    };
+    const [confirmAts, setConfirmAts] = React.useState(false);
+    const handleScheduleATS = () => setConfirmAts(true);
 
     const handleAtsLineup = () => {
-        alert("Please use the sidebar 'ATS Lineup' button to enter appointment details.");
+        toast.info("Use the “ATS Lineup” button on this lead in the Agreement list to add the appointment.");
     };
 
     const handleMarkRegistered = () => {
-         alert("Please use the sidebar 'Mark Registered' button to enter official records.");
+         toast.info("Use the “Mark Registered” button on this lead in the Agreement list to add the registration details.");
     };
 
     const getAgreementActionLabel = () => {
@@ -464,6 +464,10 @@ const UnitDocumentsTab: React.FC<{ lead: Lead; project: Project | null; onUpdate
                     );
                 })}
             </div>
+            <Modal isOpen={confirmAts} onClose={() => setConfirmAts(false)} size="sm" title="Move to ATS stage?" subtitle={lead.name}
+                footer={<><Button type="button" tone="ghost" onClick={() => setConfirmAts(false)}>Not yet</Button><Button type="button" onClick={() => { setConfirmAts(false); onUpdateLifecycle?.(lead.id, 'agreementStatus', 'ATS'); }}>Move to ATS</Button></>}>
+                <p className="text-sm text-[var(--text-secondary)]">The signed agreement has been verified. Move this booking to the ATS (Agreement to Sell) stage?</p>
+            </Modal>
             {viewingTemplate && (
                 <UnitDocumentViewerModal
                     isOpen={!!viewingTemplate}
@@ -510,7 +514,7 @@ const ProjectDocumentsTab: React.FC<{ project: Project | null }> = ({ project })
                         icon={doc.icon}
                         description={doc.description}
                         step={idx + 1}
-                        onView={() => alert(`Viewing ${doc.name}... (This is a simulation)`)}
+                        onView={() => toast.info(`A preview for “${doc.name}” isn't available yet.`)}
                     />
                 ))}
             </div>

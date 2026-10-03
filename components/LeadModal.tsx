@@ -1,7 +1,7 @@
-
 import React from 'react';
 import { Lead, NewLeadData, LeadStatus, UnitType, Source, LocationSetting, Budget, ClientProfile, LivingPlace, Project, FormFieldConfig, User } from '../types';
-import DynamicFieldRenderer from './DynamicFieldRenderer';
+import { Modal, Field, Section, Chips, inputCls, textareaCls } from './ui/Modal';
+import { todayISO } from './leadUi';
 
 interface LeadModalProps {
   isOpen: boolean;
@@ -18,12 +18,25 @@ interface LeadModalProps {
   projects: Project[];
   formConfigs: FormFieldConfig[];
   users: User[];
+  /** Signed-in user: the default owner of a new lead. */
+  currentUserId?: string;
 }
 
-const LeadModal: React.FC<LeadModalProps> = ({ isOpen, onClose, onAddLead, onUpdateLead, leadToEdit, unitTypes, locationSettings, sources, budgets, clientProfiles, livingPlaces, projects, formConfigs, users }) => {
+type Errors = Record<string, string>;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const addDays = (n: number) => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().split('T')[0]; };
+const QUICK: [string, number][] = [['Today', 0], ['Tomorrow', 1], ['In 3 days', 3], ['Next week', 7]];
+
+const Select: React.FC<{ id: string; value: string; onChange: (v: string) => void; placeholder: string; options: string[]; invalid?: boolean }> = ({ id, value, onChange, placeholder, options, invalid }) => (
+  <select id={id} value={value} onChange={e => onChange(e.target.value)} className={inputCls(invalid)} aria-invalid={invalid}>
+    <option value="">{placeholder}</option>
+    {options.map(o => <option key={o} value={o}>{o}</option>)}
+  </select>
+);
+
+const LeadModal: React.FC<LeadModalProps> = ({ isOpen, onClose, onAddLead, onUpdateLead, leadToEdit, unitTypes, locationSettings, sources, budgets, clientProfiles, livingPlaces, projects, formConfigs, users, currentUserId }) => {
   const isEditing = !!leadToEdit;
 
-  // System Fields
   const [firstName, setFirstName] = React.useState('');
   const [lastName, setLastName] = React.useState('');
   const [email, setEmail] = React.useState('');
@@ -37,378 +50,185 @@ const LeadModal: React.FC<LeadModalProps> = ({ isOpen, onClose, onAddLead, onUpd
   const [channelSource, setChannelSource] = React.useState('');
   const [sourceName, setSourceName] = React.useState('');
   const [leadProject, setLeadProject] = React.useState('');
+  const [ownerId, setOwnerId] = React.useState('');
   const [message, setMessage] = React.useState('');
-  
-  // Follow-up Fields (only for new lead)
+
   const [followUpActive, setFollowUpActive] = React.useState(false);
   const [followUpType, setFollowUpType] = React.useState<'Call' | 'Email' | 'Meeting'>('Call');
   const [followUpDate, setFollowUpDate] = React.useState('');
   const [followUpTime, setFollowUpTime] = React.useState('');
   const [followUpNotes, setFollowUpNotes] = React.useState('');
-  const [followUpAssignedTo, setFollowUpAssignedTo] = React.useState('');
-  
-  // Custom Fields State
-  const [customData, setCustomData] = React.useState<Record<string, any>>({});
 
-  const [emailError, setEmailError] = React.useState<string | null>(null);
-  const [isInterestDropdownOpen, setIsInterestDropdownOpen] = React.useState(false);
-  const interestDropdownRef = React.useRef<HTMLDivElement>(null);
+  const [customData, setCustomData] = React.useState<Record<string, any>>({});
+  const [submitted, setSubmitted] = React.useState(false);
 
   const activeConfigs = React.useMemo(() => (formConfigs || []).filter(c => c.module === 'lead' && c.isVisible), [formConfigs]);
   const customConfigs = React.useMemo(() => activeConfigs.filter(c => !c.isSystem), [activeConfigs]);
-  const isVisible = (fieldName: string) => activeConfigs.some(c => c.fieldName === fieldName);
-  const isRequired = (fieldName: string) => activeConfigs.find(c => c.fieldName === fieldName)?.isRequired || false;
+  const isVisible = (f: string) => activeConfigs.some(c => c.fieldName === f);
+  const isRequired = (f: string) => activeConfigs.find(c => c.fieldName === f)?.isRequired || false;
 
   const channelSources = React.useMemo(() => [...new Set(sources.map(s => s.channelSource))], [sources]);
-  const sourceNames = React.useMemo(() => {
-    if (!channelSource) return [];
-    return sources.filter(s => s.channelSource === channelSource);
-  }, [sources, channelSource]);
+  const sourceNames = React.useMemo(() => (channelSource ? sources.filter(s => s.channelSource === channelSource).map(s => s.name) : []), [sources, channelSource]);
 
+  // Fill the form when it opens. A new lead starts blank so nothing is saved by accident.
   React.useEffect(() => {
-    if (channelSource) {
-      if (!isEditing) {
-        const details = sources.filter(s => s.channelSource === channelSource);
-        setSourceName(details[0]?.name || '');
-      }
+    if (!isOpen) return;
+    setSubmitted(false);
+    if (leadToEdit) {
+      const [first, ...rest] = leadToEdit.name.split(' ');
+      setFirstName(first || ''); setLastName(rest.join(' '));
+      setEmail(leadToEdit.email || '');
+      setPhone(''); // the saved number is never shown; type a new one only to change it
+      setInitialInterest(leadToEdit.initialInterest || []);
+      setPreferredLocation(leadToEdit.preferredLocation || ''); setBudget(leadToEdit.budget || '');
+      setClientProfile(leadToEdit.clientProfile || ''); setLivingPlace(leadToEdit.livingPlace || '');
+      setLeadStatus(leadToEdit.leadStatus); setChannelSource(leadToEdit.channelSource || ''); setSourceName(leadToEdit.leadSource || '');
+      setLeadProject(leadToEdit.leadProject === 'Not Assigned' ? '' : leadToEdit.leadProject || ''); setCustomData(leadToEdit.customData || {});
+      setOwnerId(leadToEdit.ownerId); setMessage('');
     } else {
-      setSourceName('');
+      setFirstName(''); setLastName(''); setEmail(''); setPhone(''); setInitialInterest([]);
+      setPreferredLocation(''); setBudget(''); setClientProfile(''); setLivingPlace('');
+      setLeadStatus('New'); setChannelSource(''); setSourceName(''); setLeadProject(projects.length === 1 ? projects[0].name : '');
+      setOwnerId(users.find(u => u.id === currentUserId)?.id || users[0]?.id || ''); setCustomData({}); setMessage('');
+      setFollowUpActive(false); setFollowUpType('Call'); setFollowUpDate(''); setFollowUpTime(''); setFollowUpNotes('');
     }
-  }, [channelSource, sources, isEditing]);
-  
-  React.useEffect(() => {
-    if (isOpen) {
-      if (isEditing && leadToEdit) {
-        const nameParts = leadToEdit.name.split(' ');
-        const first = nameParts.shift() || '';
-        const last = nameParts.join(' ');
-        setFirstName(first);
-        setLastName(last);
-        setEmail(leadToEdit.email);
-        setPhone(leadToEdit.phone);
-        setInitialInterest(leadToEdit.initialInterest || []);
-        setPreferredLocation(leadToEdit.preferredLocation);
-        setBudget(leadToEdit.budget || '');
-        setClientProfile(leadToEdit.clientProfile || '');
-        setLivingPlace(leadToEdit.livingPlace || '');
-        setLeadStatus(leadToEdit.leadStatus);
-        setChannelSource(leadToEdit.channelSource);
-        setSourceName(leadToEdit.leadSource);
-        setLeadProject(leadToEdit.leadProject);
-        setCustomData(leadToEdit.customData || {});
-        setMessage('');
-        setEmailError(null);
-      } else {
-        setFirstName('');
-        setLastName('');
-        setEmail('');
-        setPhone('');
-        setInitialInterest([]);
-        setPreferredLocation(locationSettings[0]?.name || '');
-        setBudget(budgets[0]?.name || '');
-        setClientProfile(clientProfiles[0]?.name || '');
-        setLivingPlace(livingPlaces[0]?.name || '');
-        setLeadStatus('New');
-        setChannelSource(channelSources[0] || '');
-        setLeadProject(projects[0]?.name || '');
-        setCustomData({});
-        setMessage('');
-        setEmailError(null);
-        // Reset follow-up
-        setFollowUpActive(false);
-        setFollowUpType('Call');
-        setFollowUpDate('');
-        setFollowUpTime('');
-        setFollowUpNotes('');
-        setFollowUpAssignedTo(users[0]?.name || '');
-      }
-      setIsInterestDropdownOpen(false);
-    }
-  }, [isOpen, isEditing, leadToEdit, unitTypes, locationSettings, channelSources, budgets, clientProfiles, livingPlaces, projects, users]);
+  }, [isOpen, leadToEdit, projects, users, currentUserId]);
 
-  const handleCustomChange = (field: string, value: any) => {
-      setCustomData(prev => ({ ...prev, [field]: value }));
-  };
+  // Picking a channel resets the source if it no longer belongs to it.
+  React.useEffect(() => { if (sourceName && !sourceNames.includes(sourceName)) setSourceName(''); }, [sourceNames, sourceName]);
 
-  const validate = () => {
-    if (isVisible('email')) {
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (email.trim() && !emailRegex.test(email)) {
-            setEmailError('Please enter a valid email address.');
-            return false;
-        }
-    }
-    
-    if (isRequired('firstName') && !firstName.trim()) return false;
-    if (isRequired('phone') && !phone.trim()) return false;
-    if (isRequired('email') && !email.trim()) return false;
-    if (isRequired('leadProject') && !leadProject.trim()) return false;
+  const errors: Errors = {};
+  if (isVisible('firstName') && isRequired('firstName') && !firstName.trim()) errors.firstName = 'Enter the first name.';
+  if (isVisible('lastName') && isRequired('lastName') && !lastName.trim()) errors.lastName = 'Enter the last name.';
+  if (isVisible('phone')) {
+    const digits = phone.replace(/\D/g, '');
+    if (!phone.trim() && isRequired('phone') && !leadToEdit?.phone) errors.phone = 'Enter a phone number.';
+    else if (phone.trim() && digits.length < 8) errors.phone = 'That number looks too short.';
+  }
+  if (isVisible('email')) {
+    if (!email.trim() && isRequired('email')) errors.email = 'Enter an email address.';
+    else if (email.trim() && !EMAIL_RE.test(email.trim())) errors.email = 'Enter a valid email, like name@company.com.';
+  }
+  if (isVisible('leadProject') && isRequired('leadProject') && !leadProject) errors.leadProject = 'Choose a project.';
+  if (isVisible('initialInterest') && isRequired('initialInterest') && initialInterest.length === 0) errors.initialInterest = 'Pick at least one.';
+  if (isVisible('preferredLocation') && isRequired('preferredLocation') && !preferredLocation) errors.preferredLocation = 'Choose a location.';
+  if (isVisible('budget') && isRequired('budget') && !budget) errors.budget = 'Choose a budget.';
+  if (isVisible('channelSource') && !channelSource) errors.channelSource = 'Where did this lead come from?';
+  if (isVisible('sourceName') && !sourceName) errors.sourceName = 'Choose the source.';
+  for (const c of customConfigs) if (c.isRequired && !customData[c.fieldName]) errors[`c:${c.fieldName}`] = `${c.label} is required.`;
+  if (followUpActive && !followUpDate) errors.followUpDate = 'Pick a date.';
+  if (followUpActive && !followUpTime) errors.followUpTime = 'Pick a time.';
+  const show = (k: string) => (submitted ? errors[k] || null : null);
 
-    for (const config of customConfigs) {
-        if (config.isRequired && !customData[config.fieldName]) {
-            alert(`${config.label} is required.`);
-            return false;
-        }
-    }
-
-    if (followUpActive && (!followUpDate || !followUpTime)) {
-        alert("Please provide date and time for the follow-up.");
-        return false;
-    }
-
-    return true;
-  };
-
-  const handleSubmit = React.useCallback((e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (validate()) {
-      if (isEditing && onUpdateLead && leadToEdit) {
-        const updatedLead: Lead = {
-          ...leadToEdit,
-          name: `${firstName} ${lastName}`.trim(),
-          avatarInitials: `${firstName[0] || ''}${lastName[0] || ''}`.toUpperCase(),
-          email,
-          phone,
-          initialInterest,
-          preferredLocation,
-          budget,
-          clientProfile,
-          livingPlace,
-          leadStatus,
-          channelSource,
-          leadSource: sourceName,
-          leadProject: leadProject,
-          customData: customData,
-        };
-        onUpdateLead(updatedLead);
-      } else if (!isEditing && onAddLead) {
-        onAddLead({ 
-            firstName, lastName, email, phone, initialInterest, preferredLocation, budget, clientProfile, livingPlace, leadStatus, channelSource, sourceName, leadProject, message, customData,
-            followUp: followUpActive ? { type: followUpType, date: followUpDate, time: followUpTime, notes: followUpNotes, assignedTo: followUpAssignedTo } : undefined
-        });
-      }
-      onClose();
+    setSubmitted(true);
+    if (Object.keys(errors).length) {
+      window.setTimeout(() => document.querySelector<HTMLElement>('[role=dialog] [aria-invalid="true"]')?.focus(), 30);
+      return;
     }
-  }, [firstName, lastName, email, phone, initialInterest, preferredLocation, budget, clientProfile, livingPlace, leadStatus, channelSource, sourceName, leadProject, message, customData, isEditing, leadToEdit, onAddLead, onUpdateLead, validate, onClose, followUpActive, followUpType, followUpDate, followUpTime, followUpNotes, followUpAssignedTo]);
+    if (isEditing && onUpdateLead && leadToEdit) {
+      onUpdateLead({
+        ...leadToEdit, name: `${firstName} ${lastName}`.trim(), avatarInitials: `${firstName[0] || ''}${lastName[0] || ''}`.toUpperCase(),
+        email: email.trim(), phone: phone.trim() || leadToEdit.phone || '', initialInterest, preferredLocation, budget, clientProfile, livingPlace,
+        leadStatus, channelSource, leadSource: sourceName, leadProject: leadProject || 'Not Assigned', customData,
+      });
+    } else if (!isEditing && onAddLead) {
+      onAddLead({
+        ownerId, firstName: firstName.trim(), lastName: lastName.trim(), email: email.trim(), phone: phone.trim(), initialInterest, preferredLocation, budget, clientProfile, livingPlace,
+        leadStatus, channelSource, sourceName, leadProject, message: message.trim() || undefined, customData,
+        followUp: followUpActive ? { type: followUpType, date: followUpDate, time: followUpTime, notes: followUpNotes.trim() || undefined, assignedTo: users.find(u => u.id === ownerId)?.name || '' } : undefined,
+      });
+    }
+    onClose();
+  };
 
-  if (!isOpen) return null;
+  const interestOptions = (unitTypes || []).map(u => u.name);
+  const hasMore = (isVisible('clientProfile') || isVisible('livingPlace') || (isVisible('message') && !isEditing));
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50 animate-fadeIn" onClick={onClose} role="dialog" aria-modal="true">
-      <div className="bg-[var(--medium-bg)] p-6 sm:p-8 rounded-lg shadow-xl w-11/12 max-w-2xl max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-        <h3 className="text-xl sm:text-2xl font-bold mb-6 text-[var(--text-primary)] text-center flex-shrink-0">
-          {isEditing ? 'Edit Lead' : 'Create New Lead'}
-        </h3>
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto pr-4 -mr-4 flex flex-col gap-4 custom-scrollbar">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {isVisible('firstName') && (
-                <div>
-                    <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">First Name{isRequired('firstName') ? '*' : ''}</label>
-                    <input type="text" value={firstName} onChange={e => setFirstName(e.target.value)} placeholder="Enter first name" className="w-full p-3 rounded-md border border-[var(--light-bg)] bg-[var(--dark-bg)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary-color)]" required={isRequired('firstName')} />
-                </div>
-            )}
-            {isVisible('lastName') && (
-                <div>
-                    <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Last Name{isRequired('lastName') ? '*' : ''}</label>
-                    <input type="text" value={lastName} onChange={e => setLastName(e.target.value)} placeholder="Enter last name" className="w-full p-3 rounded-md border border-[var(--light-bg)] bg-[var(--dark-bg)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary-color)]" required={isRequired('lastName')} />
-                </div>
-            )}
+    <Modal isOpen={isOpen} onClose={onClose} size="2xl" title={isEditing ? 'Edit lead' : 'New lead'} subtitle={isEditing ? leadToEdit?.name : 'Add an enquiry to your pipeline'} onSubmit={handleSubmit} submitLabel={isEditing ? 'Save changes' : 'Create lead'}>
+      <Section title="Contact">
+        {isVisible('firstName') && <Field label="First name" htmlFor="lm-first" required={isRequired('firstName')} error={show('firstName')}><input id="lm-first" value={firstName} onChange={e => setFirstName(e.target.value)} autoComplete="off" className={inputCls(!!show('firstName'))} aria-invalid={!!show('firstName')} /></Field>}
+        {isVisible('lastName') && <Field label="Last name" htmlFor="lm-last" required={isRequired('lastName')} error={show('lastName')}><input id="lm-last" value={lastName} onChange={e => setLastName(e.target.value)} autoComplete="off" className={inputCls(!!show('lastName'))} aria-invalid={!!show('lastName')} /></Field>}
+        {isVisible('phone') && (
+          <Field label="Mobile number" htmlFor="lm-phone" required={isRequired('phone') && !leadToEdit?.phone} error={show('phone')} hint={leadToEdit?.phone ? 'The saved number stays hidden. Type only to change it.' : undefined}>
+            <input id="lm-phone" type="tel" inputMode="tel" value={phone} onChange={e => setPhone(e.target.value)} autoComplete="off" placeholder={leadToEdit?.phone ? 'Saved' : '+91 98765 43210'} className={inputCls(!!show('phone'))} aria-invalid={!!show('phone')} />
+          </Field>
+        )}
+        {isVisible('email') && <Field label="Email" htmlFor="lm-email" required={isRequired('email')} error={show('email')}><input id="lm-email" type="email" value={email} onChange={e => setEmail(e.target.value)} autoComplete="off" placeholder="name@example.com" className={inputCls(!!show('email'))} aria-invalid={!!show('email')} /></Field>}
+      </Section>
+
+      <Section title="Requirement">
+        {isVisible('leadProject') && <Field label="Project" htmlFor="lm-project" required={isRequired('leadProject')} error={show('leadProject')}><Select id="lm-project" value={leadProject} onChange={setLeadProject} placeholder="Select project" options={projects.map(p => p.name)} invalid={!!show('leadProject')} /></Field>}
+        {isVisible('preferredLocation') && <Field label="Preferred location" htmlFor="lm-loc" required={isRequired('preferredLocation')} error={show('preferredLocation')}><Select id="lm-loc" value={preferredLocation} onChange={setPreferredLocation} placeholder="Select location" options={(locationSettings || []).map(l => l.name)} invalid={!!show('preferredLocation')} /></Field>}
+        {isVisible('initialInterest') && (
+          <Field label="Looking for" required={isRequired('initialInterest')} error={show('initialInterest')} className="sm:col-span-2">
+            <Chips label="Looking for" options={interestOptions} value={initialInterest} onChange={setInitialInterest} multiple />
+          </Field>
+        )}
+        {isVisible('budget') && <Field label="Budget" htmlFor="lm-budget" required={isRequired('budget')} error={show('budget')}><Select id="lm-budget" value={budget} onChange={setBudget} placeholder="Select budget" options={(budgets || []).map(b => b.name)} invalid={!!show('budget')} /></Field>}
+      </Section>
+
+      <Section title="Source & owner">
+        {isVisible('channelSource') && <Field label="Channel" htmlFor="lm-channel" required error={show('channelSource')}><Select id="lm-channel" value={channelSource} onChange={setChannelSource} placeholder="Select channel" options={channelSources} invalid={!!show('channelSource')} /></Field>}
+        {isVisible('sourceName') && <Field label="Source" htmlFor="lm-source" required error={show('sourceName')}><Select id="lm-source" value={sourceName} onChange={setSourceName} placeholder={channelSource ? 'Select source' : 'Choose a channel first'} options={sourceNames} invalid={!!show('sourceName')} /></Field>}
+        {!isEditing && (
+          <Field label="Owner" htmlFor="lm-owner" hint="The salesperson responsible for this lead.">
+            <select id="lm-owner" value={ownerId} onChange={e => setOwnerId(e.target.value)} className={inputCls()}>
+              {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+            </select>
+          </Field>
+        )}
+      </Section>
+
+      {hasMore && (
+        <details className="group rounded-lg border border-[var(--border-color)]">
+          <summary className="cursor-pointer list-none px-3 py-2.5 flex items-center justify-between text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+            More details <i className="fas fa-chevron-down text-[10px] transition-transform group-open:rotate-180" aria-hidden="true"></i>
+          </summary>
+          <div className="px-3 pb-3 pt-1 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3.5">
+            {isVisible('clientProfile') && <Field label="Client profile" htmlFor="lm-profile"><Select id="lm-profile" value={clientProfile} onChange={setClientProfile} placeholder="Select profile" options={(clientProfiles || []).map(c => c.name)} /></Field>}
+            {isVisible('livingPlace') && <Field label="Currently living in" htmlFor="lm-living"><Select id="lm-living" value={livingPlace} onChange={setLivingPlace} placeholder="Select" options={(livingPlaces || []).map(l => l.name)} /></Field>}
+            {isVisible('message') && !isEditing && <Field label="First note" htmlFor="lm-msg" className="sm:col-span-2"><textarea id="lm-msg" value={message} onChange={e => setMessage(e.target.value)} rows={2} placeholder="What did the customer ask for?" className={textareaCls()} /></Field>}
           </div>
+        </details>
+      )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {isVisible('phone') && (
-                <div>
-                    <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Phone{isRequired('phone') ? '*' : ''}</label>
-                    <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="Enter phone number" className="w-full p-3 rounded-md border border-[var(--light-bg)] bg-[var(--dark-bg)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary-color)]" required={isRequired('phone')} />
-                </div>
-            )}
-            {isVisible('email') && (
-                <div>
-                    <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Email{isRequired('email') ? '*' : ''}</label>
-                    <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Enter email address" className={`w-full p-3 rounded-md border ${emailError ? 'border-red-500' : 'border-[var(--light-bg)]'} bg-[var(--dark-bg)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary-color)]`} required={isRequired('email')} />
-                    {emailError && <span className="text-red-500 text-xs mt-1 block">{emailError}</span>}
-                </div>
-            )}
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {isVisible('leadProject') && (
-                <div>
-                    <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Project{isRequired('leadProject') ? '*' : ''}</label>
-                    <select value={leadProject} onChange={e => setLeadProject(e.target.value)} className="w-full p-3 rounded-md border border-[var(--light-bg)] bg-[var(--dark-bg)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary-color)]" required={isRequired('leadProject')}>
-                        <option value="" disabled>Select Project</option>
-                        {projects.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
-                    </select>
-                </div>
-            )}
-            {isVisible('initialInterest') && (
-                <div>
-                    <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Initial Interest{isRequired('initialInterest') ? '*' : ''}</label>
-                    <div className="relative" ref={interestDropdownRef}>
-                        <button type="button" onClick={() => setIsInterestDropdownOpen(!isInterestDropdownOpen)} className="w-full p-3 rounded-md border border-[var(--light-bg)] bg-[var(--dark-bg)] text-[var(--text-primary)] text-left flex justify-between items-center">
-                            <span className="truncate">{initialInterest.length > 0 ? initialInterest.join(', ') : 'Select Interests'}</span>
-                            <i className={`fas fa-chevron-down text-xs transition-transform ${isInterestDropdownOpen ? 'rotate-180' : ''}`}></i>
-                        </button>
-                        {isInterestDropdownOpen && (
-                            <div className="absolute z-10 w-full mt-1 bg-[var(--dark-bg)] border border-[var(--light-bg)] rounded-md shadow-lg max-h-40 overflow-y-auto animate-fadeInPopup">
-                                <ul className="p-1">
-                                    {(unitTypes || []).map(ut => (
-                                        <li key={ut.id} className="flex items-center gap-2 p-2 hover:bg-[var(--light-bg)] rounded cursor-pointer" onClick={() => setInitialInterest(prev => prev.includes(ut.name) ? prev.filter(i => i !== ut.name) : [...prev, ut.name])}>
-                                            <input type="checkbox" checked={initialInterest.includes(ut.name)} readOnly className="h-4 w-4 rounded text-[var(--primary-color)]" />
-                                            <span className="text-sm text-[var(--text-primary)]">{ut.name}</span>
-                                        </li>
-                                    ))}
-                                </ul>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            )}
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-             {isVisible('preferredLocation') && (
-                <div>
-                    <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Preferred Location{isRequired('preferredLocation') ? '*' : ''}</label>
-                    <select value={preferredLocation} onChange={e => setPreferredLocation(e.target.value)} className="w-full p-3 rounded-md border border-[var(--light-bg)] bg-[var(--dark-bg)] text-[var(--text-primary)]" required={isRequired('preferredLocation')}>
-                        <option value="" disabled>Select Location</option>
-                        {(locationSettings || []).map(ls => <option key={ls.id} value={ls.name}>{ls.name}</option>)}
-                    </select>
-                </div>
-             )}
-             {isVisible('budget') && (
-                <div>
-                    <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Budget{isRequired('budget') ? '*' : ''}</label>
-                    <select value={budget} onChange={e => setBudget(e.target.value)} className="w-full p-3 rounded-md border border-[var(--light-bg)] bg-[var(--dark-bg)] text-[var(--text-primary)]" required={isRequired('budget')}>
-                        <option value="" disabled>Select Budget</option>
-                        {(budgets || []).map(b => <option key={b.id} value={b.name}>{b.name}</option>)}
-                    </select>
-                </div>
-             )}
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {isVisible('clientProfile') && (
-                  <div>
-                      <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Client Profile</label>
-                      <select value={clientProfile} onChange={e => setClientProfile(e.target.value)} className="w-full p-3 rounded-md border border-[var(--light-bg)] bg-[var(--dark-bg)] text-[var(--text-primary)]">
-                          <option value="" disabled>Select Profile</option>
-                          {(clientProfiles || []).map(cp => <option key={cp.id} value={cp.name}>{cp.name}</option>)}
-                      </select>
-                  </div>
-              )}
-              {isVisible('livingPlace') && (
-                  <div>
-                      <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Current Living Place</label>
-                      <select value={livingPlace} onChange={e => setLivingPlace(e.target.value)} className="w-full p-3 rounded-md border border-[var(--light-bg)] bg-[var(--dark-bg)] text-[var(--text-primary)]">
-                          <option value="" disabled>Select Living Place</option>
-                          {(livingPlaces || []).map(lp => <option key={lp.id} value={lp.name}>{lp.name}</option>)}
-                      </select>
-                  </div>
-              )}
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {isVisible('channelSource') && (
-                <div>
-                    <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Channel Source*</label>
-                    <select value={channelSource} onChange={e => setChannelSource(e.target.value)} className="w-full p-3 rounded-md border border-[var(--light-bg)] bg-[var(--dark-bg)] text-[var(--text-primary)]" required>
-                        <option value="" disabled>Select Channel</option>
-                        {channelSources.map(cs => <option key={cs} value={cs}>{cs}</option>)}
-                    </select>
-                </div>
-              )}
-              {isVisible('sourceName') && (
-                <div>
-                    <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Source Name*</label>
-                    <select value={sourceName} onChange={e => setSourceName(e.target.value)} className="w-full p-3 rounded-md border border-[var(--light-bg)] bg-[var(--dark-bg)] text-[var(--text-primary)]" required disabled={!channelSource}>
-                        <option value="" disabled>Select Source</option>
-                        {sourceNames.map(sd => <option key={sd.id} value={sd.name}>{sd.name}</option>)}
-                    </select>
-                </div>
-              )}
-          </div>
-          
-          {isVisible('message') && !isEditing && (
-              <div>
-                  <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Initial Message</label>
-                  <textarea value={message} onChange={e => setMessage(e.target.value)} rows={2} placeholder="Initial notes..." className="w-full p-3 rounded-md border border-[var(--light-bg)] bg-[var(--dark-bg)] text-[var(--text-primary)]" />
-              </div>
-          )}
-
-          {/* Follow-up Section (New Lead Only) */}
-          {!isEditing && (
-            <div className="mt-4 p-4 rounded-lg bg-[var(--dark-bg)] border border-[var(--light-bg)]">
-                <label className="flex items-center gap-3 cursor-pointer mb-4">
-                    <input 
-                        type="checkbox" 
-                        checked={followUpActive} 
-                        onChange={e => setFollowUpActive(e.target.checked)} 
-                        className="h-4 w-4 rounded border-gray-300 text-[var(--primary-color)] focus:ring-[var(--primary-color)]"
-                    />
-                    <span className="text-sm font-bold text-[var(--text-primary)] uppercase tracking-wider">Schedule Initial Follow-up</span>
-                </label>
-
-                {followUpActive && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 animate-fadeIn">
-                        <div>
-                            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Follow-up Type</label>
-                            <select value={followUpType} onChange={e => setFollowUpType(e.target.value as any)} className="w-full p-2 text-sm rounded bg-[var(--medium-bg)] border border-[var(--light-bg)] text-[var(--text-primary)]">
-                                <option value="Call">Call</option>
-                                <option value="Email">Email</option>
-                                <option value="Meeting">Meeting</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Assigned To</label>
-                            <select value={followUpAssignedTo} onChange={e => setFollowUpAssignedTo(e.target.value)} className="w-full p-2 text-sm rounded bg-[var(--medium-bg)] border border-[var(--light-bg)] text-[var(--text-primary)]">
-                                {users.map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
-                            </select>
-                        </div>
-                        <div>
-                            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Date</label>
-                            <input type="date" value={followUpDate} onChange={e => setFollowUpDate(e.target.value)} className="w-full p-2 text-sm rounded bg-[var(--medium-bg)] border border-[var(--light-bg)] text-[var(--text-primary)]" />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Time</label>
-                            <input type="time" value={followUpTime} onChange={e => setFollowUpTime(e.target.value)} className="w-full p-2 text-sm rounded bg-[var(--medium-bg)] border border-[var(--light-bg)] text-[var(--text-primary)]" />
-                        </div>
-                        <div className="sm:col-span-2">
-                             <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Notes (Optional)</label>
-                             <textarea value={followUpNotes} onChange={e => setFollowUpNotes(e.target.value)} rows={2} placeholder="Add follow-up context..." className="w-full p-2 text-sm rounded bg-[var(--medium-bg)] border border-[var(--light-bg)] text-[var(--text-primary)] resize-none" />
-                        </div>
-                    </div>
-                )}
+      {!isEditing && (
+        <div className="rounded-lg border border-[var(--border-color)] p-3">
+          <label className="flex items-center gap-2.5 cursor-pointer">
+            <input type="checkbox" checked={followUpActive} onChange={e => setFollowUpActive(e.target.checked)} className="h-4 w-4 accent-[var(--primary-color)]" />
+            <span className="text-sm font-semibold">Schedule the first follow-up</span>
+          </label>
+          {followUpActive && (
+            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3.5 animate-fadeIn">
+              <Field label="Type" className="sm:col-span-2"><Chips label="Follow-up type" options={['Call', 'Meeting', 'Email']} value={followUpType} onChange={setFollowUpType} /></Field>
+              <Field label="When" className="sm:col-span-2"><Chips label="Quick date" options={QUICK.map(q => q[0])} value={QUICK.find(([, n]) => addDays(n) === followUpDate)?.[0] || ''} onChange={(label: string) => setFollowUpDate(addDays(QUICK.find(q => q[0] === label)![1]))} /></Field>
+              <Field label="Date" htmlFor="lm-fu-date" required error={show('followUpDate')}><input id="lm-fu-date" type="date" min={todayISO()} value={followUpDate} onChange={e => setFollowUpDate(e.target.value)} className={inputCls(!!show('followUpDate'))} aria-invalid={!!show('followUpDate')} /></Field>
+              <Field label="Time" htmlFor="lm-fu-time" required error={show('followUpTime')}><input id="lm-fu-time" type="time" value={followUpTime} onChange={e => setFollowUpTime(e.target.value)} className={inputCls(!!show('followUpTime'))} aria-invalid={!!show('followUpTime')} /></Field>
+              <Field label="Notes" htmlFor="lm-fu-notes" className="sm:col-span-2"><textarea id="lm-fu-notes" value={followUpNotes} onChange={e => setFollowUpNotes(e.target.value)} rows={2} className={textareaCls()} /></Field>
             </div>
           )}
+        </div>
+      )}
 
-          {/* Render Custom Fields */}
-          {customConfigs.length > 0 && (
-              <div className="mt-4 pt-4 border-t border-[var(--light-bg)]">
-                  <h4 className="text-sm font-bold text-[var(--primary-color)] uppercase tracking-wider mb-4">Additional Information</h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {customConfigs.map(config => (
-                          <DynamicFieldRenderer 
-                            key={config.id} 
-                            config={config} 
-                            value={customData[config.fieldName]} 
-                            onChange={(val) => handleCustomChange(config.fieldName, val)} 
-                          />
-                      ))}
-                  </div>
-              </div>
-          )}
-
-          <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-[var(--light-bg)] flex-shrink-0">
-            <button type="button" onClick={onClose} className="px-5 py-2 rounded-md bg-gray-700 text-[var(--text-primary)] font-medium hover:bg-gray-600 transition-colors">Cancel</button>
-            <button type="submit" className="px-5 py-2 rounded-md bg-[var(--primary-color)] text-white font-medium hover:bg-[#128c7e] transition-colors shadow-lg">
-              {isEditing ? 'Save Changes' : 'Create Lead'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+      {customConfigs.length > 0 && (
+        <Section title="Additional information">
+          {customConfigs.map(c => {
+            const id = `lm-c-${c.fieldName}`; const err = show(`c:${c.fieldName}`); const v = customData[c.fieldName] ?? '';
+            const set = (val: any) => setCustomData(prev => ({ ...prev, [c.fieldName]: val }));
+            return (
+              <Field key={c.id} label={c.label} htmlFor={id} required={c.isRequired} error={err} className={c.fieldType === 'textarea' ? 'sm:col-span-2' : undefined}>
+                {c.fieldType === 'textarea' ? <textarea id={id} value={v} onChange={e => set(e.target.value)} rows={3} className={textareaCls(!!err)} />
+                  : c.fieldType === 'select' ? <select id={id} value={v} onChange={e => set(e.target.value)} className={inputCls(!!err)} aria-invalid={!!err}><option value="">Select</option>{c.options?.map(o => <option key={o} value={o}>{o}</option>)}</select>
+                  : <input id={id} type={c.fieldType === 'number' ? 'number' : c.fieldType === 'date' ? 'date' : 'text'} value={v} onChange={e => set(e.target.value)} className={inputCls(!!err)} aria-invalid={!!err} />}
+              </Field>
+            );
+          })}
+        </Section>
+      )}
+    </Modal>
   );
 };
 

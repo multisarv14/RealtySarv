@@ -1,7 +1,8 @@
 
 import React from 'react';
 import { Lead, LeadStatus, User, ActiveLeadTab, AgreementStatus, LifecycleStage, LeadLifecycleStatus, CustomerDocument } from '../types';
-import Avatar from './Avatar';
+import { callNumber, getNextAction, leadSummary, urgencyClass } from './leadUi';
+import { toast } from './ui/Toast';
 
 type ActiveMenu = 'Leads' | 'Visits' | 'Booking' | 'Agreement' | 'Possession';
 type ContentTab = 'chat' | 'history' | 'details' | 'siteVisit' | 'booking' | 'ledger' | 'documents';
@@ -32,6 +33,17 @@ const getLeadStatusColorClass = (status: LeadStatus) => {
       case 'Converted': return 'bg-[#00a884] text-white';
       case 'Unqualified': return 'bg-red-500/90 text-white';
       default: return 'bg-gray-500 text-white';
+    }
+};
+
+const statusTextClass = (status: LeadStatus) => {
+    switch (status) {
+      case 'New': return 'text-sky-400';
+      case 'Contacted': return 'text-amber-400';
+      case 'Qualified': return 'text-purple-400';
+      case 'Converted': return 'text-emerald-400';
+      case 'Unqualified': return 'text-red-400';
+      default: return 'text-[var(--text-secondary)]';
     }
 };
 
@@ -80,6 +92,7 @@ const ChatItem: React.FC<ChatItemProps> = ({
       setTimeout(() => {
           onUpdateCustomData?.(id, { agreementDraftGenerated: true });
           setIsProcessing(false);
+          toast.success(`Draft marked as ready for ${name}. Open Files to view and print it.`);
       }, 1000);
   };
 
@@ -87,7 +100,7 @@ const ChatItem: React.FC<ChatItemProps> = ({
       e.stopPropagation();
       setIsProcessing(true);
       setTimeout(() => {
-          alert(`Agreement sent to ${name} via Email and WhatsApp for digital signature.`);
+          toast.success(`${name} moved to the Signature stage. Share the draft with the customer yourself; automatic Email/WhatsApp sending isn't set up yet.`);
           onUpdateLeadLifecycle?.(id, 'agreementStatus', 'Signature');
           setIsProcessing(false);
       }, 1500);
@@ -108,27 +121,42 @@ const ChatItem: React.FC<ChatItemProps> = ({
       onOpenExecutionDetails?.(id);
   };
 
+  const nextAction = React.useMemo(() => getNextAction(lead), [lead]);
+  const showActions = activeMenu === 'Leads' || activeMenu === 'Booking' || activeMenu === 'Agreement' || activeMenu === 'Possession';
+  const actionBtn = 'w-6 h-6 rounded-full flex items-center justify-center bg-[var(--primary-color)] text-white shadow hover:opacity-90 transition-opacity';
+  const summary = leadSummary(lead);
+
   return (
     <div
-      className={`group relative flex py-3 px-3 gap-3 cursor-pointer border-b border-[var(--border-color)] transition-all hover:bg-[var(--medium-bg)] ${isActive ? 'bg-[var(--light-bg)]' : ''}`}
+      role="button"
+      tabIndex={0}
+      aria-current={isActive ? 'true' : undefined}
+      className={`group relative flex py-2 px-3.5 gap-2.5 cursor-pointer border-b border-[var(--border-color)] transition-colors hover:bg-[var(--light-bg)] focus-visible:outline-none focus-visible:bg-[var(--light-bg)] ${isActive ? 'bg-[var(--light-bg)] shadow-[inset_3px_0_0_var(--primary-color)]' : ''}`}
       onClick={() => onClick(id)}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(id); } }}
     >
-      <div className="flex-shrink-0">
-        <Avatar initials={avatarInitials} size="sm" chatStatus={chatStatus} />
-      </div>
-      <div className="flex-1 min-w-0 pr-2">
-        <div className="flex justify-between items-center h-4">
-            <div className="text-[9px] text-gray-500 font-mono tracking-tight opacity-70">L:{id.substring(0,6).toUpperCase()}</div>
-            <div className="text-[10px] text-[var(--text-secondary)] font-medium group-hover:opacity-0 transition-opacity">{time}</div>
+      <div className="flex-1 min-w-0">
+        <div className="relative flex items-baseline justify-between gap-2 min-h-[20px]">
+            <span className={`text-[13px] text-[var(--text-primary)] truncate ${lead.read === false ? 'font-bold' : 'font-semibold'}`}>{name}</span>
+            <span className="flex items-center gap-1 text-[10px] text-[var(--text-secondary)] shrink-0 transition-opacity group-hover:opacity-0 group-focus-within:opacity-0">
+              {lead.read === false && <span className="w-1.5 h-1.5 rounded-full bg-[var(--primary-color)]" title="Not opened yet"></span>}
+              {time}
+            </span>
+            {showActions && (
+              <div className="absolute right-0 top-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+                {lead.phone && (
+                  <button type="button" onClick={(e) => { e.stopPropagation(); callNumber(lead.phone); }} className={actionBtn} aria-label="Call" title="Call"><i className="fas fa-phone-alt text-[10px]" aria-hidden="true"></i></button>
+                )}
+                <button onClick={(e) => { e.stopPropagation(); onScheduleFollowUp(id); }} className={actionBtn} aria-label="Schedule follow-up" title="Schedule follow-up"><i className="fas fa-bell text-[10px]" aria-hidden="true"></i></button>
+                <button onClick={(e) => { e.stopPropagation(); onScheduleSiteVisit(id); }} className={actionBtn} aria-label="Schedule site visit" title="Schedule site visit"><i className="fas fa-map-marker-alt text-[10px]" aria-hidden="true"></i></button>
+              </div>
+            )}
         </div>
-        <div className="flex items-center gap-1 mt-0.5">
-          <span className="font-bold text-[13px] text-[var(--text-primary)] truncate">{name}</span>
-          <span className="text-[11px] text-[var(--text-secondary)] truncate opacity-80">- {lead.leadProject}</span>
-        </div>
-        <div className="flex items-center gap-1.5 mt-1">
-            <span className={`px-1.5 py-0.5 text-[9px] rounded font-semibold uppercase tracking-wider ${getLeadStatusColorClass(leadStatus)}`}>{leadStatus}</span>
-            <span className="px-1.5 py-0.5 text-[9px] rounded font-bold uppercase bg-[var(--light-bg)] text-[var(--text-secondary)] border border-[var(--border-color)]">{leadSource}</span>
-            
+        <div className="text-[11px] text-[var(--text-secondary)] truncate leading-tight">{summary || lead.leadProject || ' '}</div>
+        <div className="flex items-center flex-wrap gap-1 mt-0.5">
+            <span className={`text-[11px] font-semibold ${statusTextClass(leadStatus)}`}><span aria-hidden="true">● </span>{leadStatus}</span>
+            {nextAction && <span className={`px-1.5 py-px text-[10px] rounded font-semibold border ${urgencyClass[nextAction.urgency]}`}><i className="far fa-clock mr-1" aria-hidden="true"></i>{nextAction.label}</span>}
+
             {activeMenu === 'Booking' && onConfirmBooking && lead.bookingStatus === 'Pending' && (
                 <button 
                     onClick={(e) => { e.stopPropagation(); onConfirmBooking(id); }}
@@ -229,29 +257,9 @@ const ChatItem: React.FC<ChatItemProps> = ({
                     )}
                 </div>
             )}
-
-            {owner && !onConfirmBooking && activeMenu !== 'Agreement' && <div className="ml-auto text-[9px] font-bold text-gray-500 px-1.5 py-0.5 bg-gray-200/30 rounded group-hover:opacity-0 transition-opacity">{owner.name.split(' ')[0]}</div>}
         </div>
       </div>
 
-      {(activeMenu === 'Leads' || activeMenu === 'Booking' || activeMenu === 'Agreement' || activeMenu === 'Possession') && (
-          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-all translate-x-2 group-hover:translate-x-0">
-              <button 
-                onClick={(e) => { e.stopPropagation(); onScheduleFollowUp(id); }}
-                className="w-7 h-7 rounded-full flex items-center justify-center bg-blue-500 text-white shadow-md hover:bg-blue-600 transition-all border border-blue-400"
-                title="Schedule Follow-up"
-              >
-                <i className="fas fa-phone-alt text-[10px]"></i>
-              </button>
-              <button 
-                onClick={(e) => { e.stopPropagation(); onScheduleSiteVisit(id); }}
-                className="w-7 h-7 rounded-full flex items-center justify-center bg-indigo-500 text-white shadow-md hover:bg-indigo-600 transition-colors border border-indigo-400"
-                title="Schedule Site Visit"
-              >
-                <i className="fas fa-calendar-alt text-[10px]"></i>
-              </button>
-          </div>
-      )}
     </div>
   );
 };
