@@ -2,6 +2,9 @@
 import React from 'react';
 import { FormFieldConfig, FormModule, FieldType } from '../../types';
 import { v4 as uuidv4 } from 'uuid';
+import { toast } from '../ui/Toast';
+import { confirmDialog } from '../ui/Confirm';
+import { SHOW_DELETE } from '../../features';
 
 interface AdminFormFieldCustomizationProps {
   configs: FormFieldConfig[];
@@ -111,8 +114,8 @@ const AdminFormFieldCustomization: React.FC<AdminFormFieldCustomizationProps> = 
     }));
   };
 
-  const handleDeleteCustom = (id: string) => {
-      if (window.confirm("Permanently delete this custom field? Existing data for this field will be inaccessible.")) {
+  const handleDeleteCustom = async (id: string) => {
+      if (await confirmDialog({ title: 'Delete custom field?', message: 'Existing data for this field will be inaccessible.', confirmLabel: 'Delete', danger: true })) {
           setLocalConfigs(prev => (prev || []).filter(c => c.id !== id));
       }
   };
@@ -124,7 +127,7 @@ const AdminFormFieldCustomization: React.FC<AdminFormFieldCustomizationProps> = 
 
   const handleSave = () => {
     onUpdateConfigs(localConfigs);
-    alert('Form structure updated successfully!');
+    toast.success('Form structure saved.');
   };
 
   return (
@@ -201,7 +204,7 @@ const AdminFormFieldCustomization: React.FC<AdminFormFieldCustomizationProps> = 
                     )}
                   </td>
                   <td className="p-4 text-right">
-                      {!config.isSystem && (
+                      {SHOW_DELETE && !config.isSystem && (
                           <button onClick={() => handleDeleteCustom(config.id)} className="text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-2 hover:bg-red-500/10 rounded-full" title="Delete Field">
                               <i className="fas fa-trash-alt"></i>
                           </button>

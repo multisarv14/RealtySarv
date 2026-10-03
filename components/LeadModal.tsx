@@ -1,5 +1,5 @@
 import React from 'react';
-import { Lead, NewLeadData, LeadStatus, UnitType, Source, LocationSetting, Budget, ClientProfile, LivingPlace, Project, FormFieldConfig, User } from '../types';
+import { Lead, ChannelPartner, NewLeadData, LeadStatus, UnitType, Source, LocationSetting, Budget, ClientProfile, LivingPlace, Project, FormFieldConfig, User } from '../types';
 import { Modal, Field, Section, Chips, inputCls, textareaCls } from './ui/Modal';
 import { todayISO } from './leadUi';
 
@@ -12,6 +12,8 @@ interface LeadModalProps {
   unitTypes: UnitType[];
   locationSettings: LocationSetting[];
   sources: Source[];
+  /** Partners that can be credited with the lead (optional). */
+  channelPartners?: ChannelPartner[];
   budgets: Budget[];
   clientProfiles: ClientProfile[];
   livingPlaces: LivingPlace[];
@@ -20,6 +22,8 @@ interface LeadModalProps {
   users: User[];
   /** Signed-in user: the default owner of a new lead. */
   currentUserId?: string;
+  /** An enabled distribution rule exists: the owner can be left to the rules. */
+  autoAssign?: boolean;
 }
 
 type Errors = Record<string, string>;
@@ -34,7 +38,7 @@ const Select: React.FC<{ id: string; value: string; onChange: (v: string) => voi
   </select>
 );
 
-const LeadModal: React.FC<LeadModalProps> = ({ isOpen, onClose, onAddLead, onUpdateLead, leadToEdit, unitTypes, locationSettings, sources, budgets, clientProfiles, livingPlaces, projects, formConfigs, users, currentUserId }) => {
+const LeadModal: React.FC<LeadModalProps> = ({ isOpen, onClose, onAddLead, onUpdateLead, leadToEdit, unitTypes, locationSettings, sources, budgets, clientProfiles, livingPlaces, projects, channelPartners, autoAssign, formConfigs, users, currentUserId }) => {
   const isEditing = !!leadToEdit;
 
   const [firstName, setFirstName] = React.useState('');
@@ -49,6 +53,7 @@ const LeadModal: React.FC<LeadModalProps> = ({ isOpen, onClose, onAddLead, onUpd
   const [leadStatus, setLeadStatus] = React.useState<LeadStatus>('New');
   const [channelSource, setChannelSource] = React.useState('');
   const [sourceName, setSourceName] = React.useState('');
+  const [channelPartnerId, setChannelPartnerId] = React.useState('');
   const [leadProject, setLeadProject] = React.useState('');
   const [ownerId, setOwnerId] = React.useState('');
   const [message, setMessage] = React.useState('');
@@ -82,17 +87,17 @@ const LeadModal: React.FC<LeadModalProps> = ({ isOpen, onClose, onAddLead, onUpd
       setInitialInterest(leadToEdit.initialInterest || []);
       setPreferredLocation(leadToEdit.preferredLocation || ''); setBudget(leadToEdit.budget || '');
       setClientProfile(leadToEdit.clientProfile || ''); setLivingPlace(leadToEdit.livingPlace || '');
-      setLeadStatus(leadToEdit.leadStatus); setChannelSource(leadToEdit.channelSource || ''); setSourceName(leadToEdit.leadSource || '');
+      setLeadStatus(leadToEdit.leadStatus); setChannelSource(leadToEdit.channelSource || ''); setSourceName(leadToEdit.leadSource || ''); setChannelPartnerId(leadToEdit.channelPartnerId || '');
       setLeadProject(leadToEdit.leadProject === 'Not Assigned' ? '' : leadToEdit.leadProject || ''); setCustomData(leadToEdit.customData || {});
       setOwnerId(leadToEdit.ownerId); setMessage('');
     } else {
       setFirstName(''); setLastName(''); setEmail(''); setPhone(''); setInitialInterest([]);
       setPreferredLocation(''); setBudget(''); setClientProfile(''); setLivingPlace('');
-      setLeadStatus('New'); setChannelSource(''); setSourceName(''); setLeadProject(projects.length === 1 ? projects[0].name : '');
-      setOwnerId(users.find(u => u.id === currentUserId)?.id || users[0]?.id || ''); setCustomData({}); setMessage('');
+      setLeadStatus('New'); setChannelSource(''); setSourceName(''); setChannelPartnerId(''); setLeadProject(projects.length === 1 ? projects[0].name : '');
+      setOwnerId(autoAssign ? '' : users.find(u => u.id === currentUserId)?.id || users[0]?.id || ''); setCustomData({}); setMessage('');
       setFollowUpActive(false); setFollowUpType('Call'); setFollowUpDate(''); setFollowUpTime(''); setFollowUpNotes('');
     }
-  }, [isOpen, leadToEdit, projects, users, currentUserId]);
+  }, [isOpen, leadToEdit, projects, users, currentUserId, autoAssign]);
 
   // Picking a channel resets the source if it no longer belongs to it.
   React.useEffect(() => { if (sourceName && !sourceNames.includes(sourceName)) setSourceName(''); }, [sourceNames, sourceName]);
@@ -132,11 +137,12 @@ const LeadModal: React.FC<LeadModalProps> = ({ isOpen, onClose, onAddLead, onUpd
         ...leadToEdit, name: `${firstName} ${lastName}`.trim(), avatarInitials: `${firstName[0] || ''}${lastName[0] || ''}`.toUpperCase(),
         email: email.trim(), phone: phone.trim() || leadToEdit.phone || '', initialInterest, preferredLocation, budget, clientProfile, livingPlace,
         leadStatus, channelSource, leadSource: sourceName, leadProject: leadProject || 'Not Assigned', customData,
+        channelPartnerId: channelPartnerId || undefined,
       });
     } else if (!isEditing && onAddLead) {
       onAddLead({
         ownerId, firstName: firstName.trim(), lastName: lastName.trim(), email: email.trim(), phone: phone.trim(), initialInterest, preferredLocation, budget, clientProfile, livingPlace,
-        leadStatus, channelSource, sourceName, leadProject, message: message.trim() || undefined, customData,
+        leadStatus, channelSource, sourceName, leadProject, message: message.trim() || undefined, customData, channelPartnerId: channelPartnerId || undefined,
         followUp: followUpActive ? { type: followUpType, date: followUpDate, time: followUpTime, notes: followUpNotes.trim() || undefined, assignedTo: users.find(u => u.id === ownerId)?.name || '' } : undefined,
       });
     }
@@ -173,9 +179,18 @@ const LeadModal: React.FC<LeadModalProps> = ({ isOpen, onClose, onAddLead, onUpd
       <Section title="Source & owner">
         {isVisible('channelSource') && <Field label="Channel" htmlFor="lm-channel" required error={show('channelSource')}><Select id="lm-channel" value={channelSource} onChange={setChannelSource} placeholder="Select channel" options={channelSources} invalid={!!show('channelSource')} /></Field>}
         {isVisible('sourceName') && <Field label="Source" htmlFor="lm-source" required error={show('sourceName')}><Select id="lm-source" value={sourceName} onChange={setSourceName} placeholder={channelSource ? 'Select source' : 'Choose a channel first'} options={sourceNames} invalid={!!show('sourceName')} /></Field>}
+        {(channelPartners || []).some(c => c.status === 'Active' || c.id === channelPartnerId) && (
+          <Field label="Channel partner" htmlFor="lm-partner" hint="Optional: credit the lead to a broker.">
+            <select id="lm-partner" value={channelPartnerId} onChange={e => setChannelPartnerId(e.target.value)} className={inputCls()}>
+              <option value="">None</option>
+              {(channelPartners || []).filter(c => c.status === 'Active' || c.id === channelPartnerId).map(c => <option key={c.id} value={c.id}>{c.firmName}</option>)}
+            </select>
+          </Field>
+        )}
         {!isEditing && (
           <Field label="Owner" htmlFor="lm-owner" hint="The salesperson responsible for this lead.">
             <select id="lm-owner" value={ownerId} onChange={e => setOwnerId(e.target.value)} className={inputCls()}>
+              {autoAssign && <option value="">Auto-assign (distribution rules)</option>}
               {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
             </select>
           </Field>

@@ -1,5 +1,6 @@
 
 import React from 'react';
+import { toast } from '../ui/Toast';
 
 interface PortalItem {
     id: string;
@@ -11,15 +12,11 @@ interface PortalItem {
 }
 
 const PORTALS: PortalItem[] = [
-    { id: '99acres', label: '99acres', icon: 'fas fa-building', color: 'text-blue-600', features: ['Inventory Sync', 'Lead Fetching'], status: 'Connected' },
-    { id: 'magicbricks', label: 'MagicBricks', icon: 'fas fa-cube', color: 'text-red-600', features: ['Inventory Sync', 'Lead Fetching'], status: 'Connected' },
-    { id: 'housing', label: 'Housing.com', icon: 'fas fa-home', color: 'text-purple-600', features: ['Inventory Sync', 'Lead Fetching'], status: 'Not Connected' },
-    { id: 'nobroker', label: 'NoBroker', icon: 'fas fa-hand-holding-usd', color: 'text-green-600', features: ['Lead Fetching'], status: 'Not Connected' },
+    { id: '99acres', label: '99acres', icon: 'fas fa-building', color: 'text-blue-600', features: ['Inventory Sync', 'Lead Fetching'], status: 'Coming Soon' },
+    { id: 'magicbricks', label: 'MagicBricks', icon: 'fas fa-cube', color: 'text-red-600', features: ['Inventory Sync', 'Lead Fetching'], status: 'Coming Soon' },
+    { id: 'housing', label: 'Housing.com', icon: 'fas fa-home', color: 'text-purple-600', features: ['Inventory Sync', 'Lead Fetching'], status: 'Coming Soon' },
+    { id: 'nobroker', label: 'NoBroker', icon: 'fas fa-hand-holding-usd', color: 'text-green-600', features: ['Lead Fetching'], status: 'Coming Soon' },
     { id: 'makaan', label: 'Makaan.com', icon: 'fas fa-map-marker-alt', color: 'text-red-500', features: ['Lead Fetching'], status: 'Coming Soon' },
-    { id: 'commonfloor', label: 'Commonfloor', icon: 'fas fa-layer-group', color: 'text-orange-500', features: ['Inventory Sync'], status: 'Coming Soon' },
-    { id: 'proptiger', label: 'Proptiger', icon: 'fas fa-tiger', color: 'text-yellow-600', features: ['Lead Fetching'], status: 'Coming Soon' },
-    { id: 'olx', label: 'OLX Real Estate', icon: 'fas fa-ad', color: 'text-teal-600', features: ['Lead Fetching'], status: 'Not Connected' },
-    { id: 'quikr', label: 'QuikrHomes', icon: 'fas fa-bolt', color: 'text-blue-400', features: ['Lead Fetching'], status: 'Coming Soon' },
 ];
 
 const PortalCard: React.FC<{ item: PortalItem }> = ({ item }) => (
@@ -54,7 +51,7 @@ const PortalCard: React.FC<{ item: PortalItem }> = ({ item }) => (
                     : 'bg-[var(--medium-bg)] text-[var(--text-primary)] hover:bg-[var(--primary-color)] hover:text-white border border-[var(--light-bg)] group-hover:border-[var(--primary-color)]'
                 }`}
                 disabled={item.status === 'Coming Soon'}
-                onClick={() => alert(`Configuring ${item.label}...`)}
+                onClick={() => toast.info(`${item.label} is coming soon.`)}
             >
                 {item.status === 'Connected' ? 'Settings' : 'Connect'}
             </button>
@@ -62,7 +59,7 @@ const PortalCard: React.FC<{ item: PortalItem }> = ({ item }) => (
                 <button 
                     className="w-8 flex items-center justify-center rounded-md bg-[var(--medium-bg)] text-[var(--text-secondary)] hover:text-[var(--primary-color)] border border-[var(--light-bg)]"
                     title="Sync Now"
-                    onClick={() => alert(`Syncing ${item.label}...`)}
+                    onClick={() => toast.info(`${item.label} is coming soon.`)}
                 >
                     <i className="fas fa-sync-alt"></i>
                 </button>

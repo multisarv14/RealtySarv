@@ -1,4 +1,5 @@
 import React from 'react';
+import { Modal, Field, inputCls, textareaCls } from '../ui/Modal';
 
 interface NewGenericSettingModalProps {
   isOpen: boolean;
@@ -6,71 +7,36 @@ interface NewGenericSettingModalProps {
   onAddItem: (itemData: { name: string; description?: string }) => void;
   title: string;
   itemNoun: string; // e.g., "Budget", "Role"
+  /** When set, the dialog edits this item and calls onSave instead of onAddItem. */
+  initial?: { name: string; description?: string } | null;
+  onSave?: (itemData: { name: string; description?: string }) => void;
 }
 
-const NewGenericSettingModal: React.FC<NewGenericSettingModalProps> = ({ isOpen, onClose, onAddItem, title, itemNoun }) => {
+const NewGenericSettingModal: React.FC<NewGenericSettingModalProps> = ({ isOpen, onClose, onAddItem, title, itemNoun, initial, onSave }) => {
   const [name, setName] = React.useState('');
   const [description, setDescription] = React.useState('');
+  const [submitted, setSubmitted] = React.useState(false);
+
+  React.useEffect(() => { if (isOpen) { setName(initial?.name || ''); setDescription(initial?.description || ''); setSubmitted(false); } }, [isOpen]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (name.trim()) {
-      onAddItem({ name: name.trim(), description: description.trim() || undefined });
-      setName('');
-      setDescription('');
-      onClose();
-    } else {
-      alert(`Please enter a ${itemNoun} Name.`);
-    }
+    setSubmitted(true);
+    if (!name.trim()) return;
+    const data = { name: name.trim(), description: description.trim() || undefined };
+    if (initial && onSave) onSave(data); else onAddItem(data);
+    onClose();
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div
-      className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50 animate-fadeIn"
-      onClick={onClose}
-      aria-labelledby="newGenericItemModalTitle"
-      role="dialog"
-      aria-modal="true"
-    >
-      <div
-        className="bg-[var(--medium-bg)] p-6 sm:p-8 rounded-lg shadow-xl w-11/12 max-w-lg relative"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3 id="newGenericItemModalTitle" className="text-xl sm:text-2xl font-bold mb-6 text-[var(--text-primary)] text-center">{title}</h3>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <div>
-            <label htmlFor="itemName" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">{itemNoun} Name</label>
-            <input
-              type="text"
-              id="itemName"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder={`e.g., 50L - 75L, IT Professional...`}
-              className="w-full p-3 rounded-md border border-[var(--light-bg)] bg-[var(--dark-bg)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary-color)]"
-              required
-              aria-required="true"
-            />
-          </div>
-          <div>
-            <label htmlFor="itemDescription" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Description (Optional)</label>
-            <textarea
-              id="itemDescription"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={3}
-              placeholder="A brief description or details..."
-              className="w-full p-3 rounded-md border border-[var(--light-bg)] bg-[var(--dark-bg)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary-color)] resize-y"
-            ></textarea>
-          </div>
-          <div className="flex justify-end gap-3 mt-4">
-            <button type="button" onClick={onClose} className="px-5 py-2 rounded-md bg-gray-700 text-[var(--text-primary)] font-medium hover:bg-gray-600 transition-colors">Cancel</button>
-            <button type="submit" className="px-5 py-2 rounded-md bg-[var(--primary-color)] text-white font-medium hover:bg-[#128c7e] transition-colors">Add {itemNoun}</button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <Modal isOpen={isOpen} onClose={onClose} size="md" title={initial ? `Edit ${itemNoun.toLowerCase()}` : title} onSubmit={handleSubmit} submitLabel={initial ? 'Save changes' : `Add ${itemNoun}`}>
+      <Field label={`${itemNoun} name`} htmlFor="itemName" required error={submitted && !name.trim() ? `Enter a ${itemNoun.toLowerCase()} name.` : null}>
+        <input id="itemName" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. 50L - 75L, IT Professional" className={inputCls(submitted && !name.trim())} />
+      </Field>
+      <Field label="Description" htmlFor="itemDescription" hint="Optional.">
+        <textarea id="itemDescription" value={description} onChange={e => setDescription(e.target.value)} rows={3} className={textareaCls()} />
+      </Field>
+    </Modal>
   );
 };
 

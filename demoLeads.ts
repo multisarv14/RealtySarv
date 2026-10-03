@@ -298,7 +298,7 @@ export function buildDemoLeads(ctx: DemoContext): Lead[] {
       chatStatus: 'offline', leadStatus: spec.status, read: !spec.unread, messages: msgs,
       email, phone, initialInterest: [interest], siteVisits, tasks, channelSource: channel, leadSource: source,
       preferredLocation: proj.location, budget, clientProfile: PROFILES[i % PROFILES.length], livingPlace: LIVING[i % LIVING.length],
-      propertyImages: [], ownerId: owner.id, leadProject: proj.name, leadDate: dayISO(-spec.ageDays),
+      propertyImages: [], ownerId: owner.id, ...(i % 4 === 1 ? { channelPartnerId: ['cp-1', 'cp-2', 'cp-1', 'cp-5', 'cp-3'][(i >> 2) % 5] } : {}), leadProject: proj.name, leadDate: dayISO(-spec.ageDays),
       bookingStatus: spec.booking ? 'Booked' : 'Pending',
       agreementStatus: spec.booking?.agreement ?? 'Drafted', possessionStatus: spec.booking?.possession ?? 'Pending',
       ...(spec.token ? { tokenAmount: spec.token } : {}),
@@ -307,5 +307,10 @@ export function buildDemoLeads(ctx: DemoContext): Lead[] {
     };
   };
 
-  return specs.map(mk);
+  const leads = specs.map(mk);
+  // A few people enquired twice (same mobile and email under another entry), so Operations > Lead merge has real work.
+  for (const [keep, dup] of [[17, 63], [30, 88], [44, 102]]) {
+    if (leads[keep] && leads[dup]) { leads[dup].phone = leads[keep].phone; leads[dup].email = leads[keep].email; leads[dup].name = leads[keep].name; leads[dup].avatarInitials = leads[keep].avatarInitials; }
+  }
+  return leads;
 }

@@ -2,6 +2,10 @@
 import React from 'react';
 import { Project, InventoryUnit, ParkingSlot, InventoryUnitStatus, ProjectType, ProjectStatus, PaymentPlan } from '../../types';
 import GenerateInventoryModal from './GenerateInventoryModal';
+import { toast } from '../ui/Toast';
+import { confirmDialog } from '../ui/Confirm';
+import { Field, Section, Button, inputCls, textareaCls } from '../ui/Modal';
+import { SHOW_DELETE } from '../../features';
 
 interface ProjectInventoryProps {
   project: Project;
@@ -184,134 +188,98 @@ const SetupView: React.FC<{
     const [wings, setWings] = React.useState(project.wings?.join(', ') || '');
     const [paymentPlanIds, setPaymentPlanIds] = React.useState(project.paymentPlanIds || []);
 
-    const handlePaymentPlanChange = (planId: string) => {
-        setPaymentPlanIds(prev =>
-            prev.includes(planId)
-                ? prev.filter(id => id !== planId)
-                : [...prev, planId]
-        );
+    const [submitted, setSubmitted] = React.useState(false);
+    const togglePlan = (planId: string) =>
+        setPaymentPlanIds(prev => prev.includes(planId) ? prev.filter(id => id !== planId) : [...prev, planId]);
+
+    const errors = {
+      name: name.trim() ? '' : 'Enter the project name.',
+      companyName: companyName.trim() ? '' : 'Enter the company name.',
+      reraNumber: reraNumber.trim() ? '' : 'Enter the RERA number.',
+      location: location.trim() ? '' : 'Enter the location.',
+      totalFloors: Number(totalFloors) > 0 ? '' : 'Enter the number of floors.',
+      description: description.trim() ? '' : 'Add a short description.',
     };
-  
+    const err = (k: keyof typeof errors) => (submitted && errors[k]) || null;
+    const wingsArray = wings.split(',').map(w => w.trim()).filter(Boolean);
+    const dirty = JSON.stringify([name, companyName, location, reraNumber, projectType, projectStatus, description, Number(totalFloors), wingsArray, paymentPlanIds]) !==
+      JSON.stringify([project.name, project.companyName, project.location, project.reraNumber, project.projectType, project.projectStatus, project.description, project.totalFloors, project.wings || [], project.paymentPlanIds || []]);
+
     const handleSaveChanges = (e: React.FormEvent) => {
       e.preventDefault();
-      const wingsArray = wings.split(',').map(w => w.trim()).filter(Boolean);
-      if (name.trim() && companyName.trim() && location.trim() && reraNumber.trim() && description.trim() && Number(totalFloors) > 0) {
-        onUpdateProject({
-          ...project,
-          name,
-          companyName,
-          location,
-          reraNumber,
-          projectType,
-          projectStatus,
-          description,
-          totalFloors: Number(totalFloors),
-          wings: wingsArray,
-          paymentPlanIds: paymentPlanIds,
-        });
-        alert('Project details updated successfully!');
-      } else {
-        alert('Please fill all fields with valid values.');
-      }
+      setSubmitted(true);
+      if (Object.values(errors).some(Boolean)) { toast.error('Please fix the highlighted fields.'); return; }
+      onUpdateProject({ ...project, name: name.trim(), companyName: companyName.trim(), location: location.trim(), reraNumber: reraNumber.trim(), projectType, projectStatus, description: description.trim(), totalFloors: Number(totalFloors), wings: wingsArray, paymentPlanIds });
+      setSubmitted(false);
+      toast.success('Project details saved.');
     };
 
-    const handleDelete = () => {
-      if(window.confirm(`Are you sure you want to delete the project "${project.name}"? This action cannot be undone.`)) {
+    const handleDelete = async () => {
+      if (await confirmDialog({ title: `Delete "${project.name}"?`, message: 'The project and its inventory are removed. This cannot be undone.', confirmLabel: 'Delete project', danger: true })) {
         onDeleteProject(project.id);
         onBack();
       }
-    }
+    };
 
     return (
-      <div className="max-w-3xl mx-auto p-4 bg-[var(--dark-bg)] rounded-lg">
-        <form onSubmit={handleSaveChanges}>
-          <fieldset className="border border-[var(--light-bg)] p-6 rounded-lg">
-            <legend className="px-2 text-lg font-semibold text-[var(--text-primary)]">Project Details</legend>
-            <div className="space-y-6 mt-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                 <div>
-                    <label htmlFor="projectName" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Project Name</label>
-                    <input type="text" id="projectName" value={name} onChange={e => setName(e.target.value)} required className="w-full p-3 rounded-md border border-[var(--light-bg)] bg-[var(--medium-bg)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary-color)]" />
+      <div className="max-w-4xl mx-auto space-y-6 pb-6">
+        <form onSubmit={handleSaveChanges} noValidate className="space-y-6">
+          <div className="bg-[var(--dark-bg)] border border-[var(--light-bg)] rounded-xl p-5 space-y-6">
+            <Section title="Project">
+              <Field label="Project name" htmlFor="projectName" required error={err('name')}><input id="projectName" value={name} onChange={e => setName(e.target.value)} className={inputCls(!!err('name'))} /></Field>
+              <Field label="Company name" htmlFor="companyName" required error={err('companyName')}><input id="companyName" value={companyName} onChange={e => setCompanyName(e.target.value)} className={inputCls(!!err('companyName'))} /></Field>
+              <Field label="RERA number" htmlFor="reraNumber" required error={err('reraNumber')}><input id="reraNumber" value={reraNumber} onChange={e => setReraNumber(e.target.value)} className={inputCls(!!err('reraNumber'))} /></Field>
+              <Field label="Type" htmlFor="projectType">
+                <select id="projectType" value={projectType} onChange={e => setProjectType(e.target.value as ProjectType)} className={inputCls()}>
+                  <option>Residential</option><option>Commercial</option><option>Mixed-Use</option>
+                </select>
+              </Field>
+              <Field label="Status" htmlFor="projectStatus">
+                <select id="projectStatus" value={projectStatus} onChange={e => setProjectStatus(e.target.value as ProjectStatus)} className={inputCls()}>
+                  <option>Pre-launch</option><option>Under Construction</option><option>Ready to Move</option>
+                </select>
+              </Field>
+              <Field label="Description" htmlFor="description" required error={err('description')} className="sm:col-span-2"><textarea id="description" value={description} onChange={e => setDescription(e.target.value)} rows={3} className={textareaCls(!!err('description'))} /></Field>
+            </Section>
+            <Section title="Location and structure">
+              <Field label="Location" htmlFor="projectLocation" required error={err('location')}><input id="projectLocation" value={location} onChange={e => setLocation(e.target.value)} className={inputCls(!!err('location'))} /></Field>
+              <Field label="Total floors" htmlFor="totalFloors" required error={err('totalFloors')}><input id="totalFloors" type="number" min="1" value={totalFloors} onChange={e => setTotalFloors(e.target.value === '' ? '' : parseInt(e.target.value, 10))} className={inputCls(!!err('totalFloors'))} /></Field>
+              <Field label="Wings" htmlFor="wings" hint="Comma separated, e.g. A, B, C" className="sm:col-span-2"><input id="wings" value={wings} onChange={e => setWings(e.target.value)} className={inputCls()} /></Field>
+            </Section>
+            <section>
+              <h4 className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-secondary)] mb-2.5 pb-1.5 border-b border-[var(--border-color)]">Payment plans offered</h4>
+              {(paymentPlans || []).length === 0 ? (
+                <p className="text-sm text-[var(--text-secondary)]">No payment plans yet. Add them under Settings, Finances, Payment Plans.</p>
+              ) : (
+                <div className="flex flex-wrap gap-2" role="group" aria-label="Payment plans">
+                  {paymentPlans.map(plan => {
+                    const on = paymentPlanIds.includes(plan.id);
+                    return (
+                      <button key={plan.id} type="button" onClick={() => togglePlan(plan.id)} aria-pressed={on}
+                        className={`px-3 py-1.5 rounded-full text-sm border transition-colors flex items-center gap-1.5 ${on ? 'bg-[var(--primary-color)] border-[var(--primary-color)] text-white' : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}>
+                        {on && <i className="fas fa-check text-[10px]" aria-hidden="true"></i>}{plan.name}
+                      </button>
+                    );
+                  })}
                 </div>
-                 <div>
-                    <label htmlFor="companyName" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Project Company Name</label>
-                    <input type="text" id="companyName" value={companyName} onChange={e => setCompanyName(e.target.value)} required className="w-full p-3 rounded-md border border-[var(--light-bg)] bg-[var(--medium-bg)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary-color)]" />
-                </div>
-              </div>
-              <div>
-                <label htmlFor="reraNumber" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">RERA Number</label>
-                <input type="text" id="reraNumber" value={reraNumber} onChange={e => setReraNumber(e.target.value)} required className="w-full p-3 rounded-md border border-[var(--light-bg)] bg-[var(--dark-bg)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary-color)]" />
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label htmlFor="projectType" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Project Type</label>
-                  <select id="projectType" value={projectType} onChange={e => setProjectType(e.target.value as ProjectType)} required className="w-full p-3 rounded-md border border-[var(--light-bg)] bg-[var(--dark-bg)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary-color)]">
-                      <option value="Residential">Residential</option>
-                      <option value="Commercial">Commercial</option>
-                      <option value="Mixed-Use">Mixed-Use</option>
-                  </select>
-                </div>
-                <div>
-                  <label htmlFor="projectStatus" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Project Status</label>
-                  <select id="projectStatus" value={projectStatus} onChange={e => setProjectStatus(e.target.value as ProjectStatus)} required className="w-full p-3 rounded-md border border-[var(--light-bg)] bg-[var(--dark-bg)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary-color)]">
-                      <option value="Pre-launch">Pre-launch</option>
-                      <option value="Under Construction">Under Construction</option>
-                      <option value="Ready to Move">Ready to Move</option>
-                  </select>
-                </div>
-                <div>
-                  <label htmlFor="projectLocation" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Location</label>
-                  <input type="text" id="projectLocation" value={location} onChange={e => setLocation(e.target.value)} required className="w-full p-3 rounded-md border border-[var(--light-bg)] bg-[var(--medium-bg)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary-color)]" />
-                </div>
-                <div>
-                  <label htmlFor="totalFloors" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Total Floors</label>
-                  <input type="number" id="totalFloors" value={totalFloors} onChange={e => setTotalFloors(e.target.value === '' ? '' : parseInt(e.target.value, 10))} required min="1" className="w-full p-3 rounded-md border border-[var(--light-bg)] bg-[var(--medium-bg)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary-color)]" />
-                </div>
-              </div>
-               <div>
-                <label htmlFor="wings" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Wings (comma separated)</label>
-                <input type="text" id="wings" value={wings} onChange={e => setWings(e.target.value)} placeholder="e.g. A, B, C" className="w-full p-3 rounded-md border border-[var(--light-bg)] bg-[var(--medium-bg)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary-color)]" />
-              </div>
-               <div>
-                  <label htmlFor="description" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Description</label>
-                  <textarea id="description" value={description} onChange={e => setDescription(e.target.value)} required rows={3} className="w-full p-3 rounded-md border border-[var(--light-bg)] bg-[var(--medium-bg)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary-color)] resize-y" />
-                </div>
-                <div>
-                    <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">Assigned Payment Plans</label>
-                    <div className="space-y-2 p-3 border border-[var(--light-bg)] rounded-md max-h-40 overflow-y-auto">
-                        {(paymentPlans || []).map(plan => (
-                            <label key={plan.id} className="flex items-center gap-3 cursor-pointer p-2 rounded hover:bg-[var(--light-bg)]">
-                                <input
-                                    type="checkbox"
-                                    checked={paymentPlanIds.includes(plan.id)}
-                                    onChange={() => handlePaymentPlanChange(plan.id)}
-                                    className="h-4 w-4 rounded border-gray-300 text-[var(--primary-color)] focus:ring-[var(--primary-color)] bg-[var(--dark-bg)]"
-                                />
-                                <span className="text-sm text-[var(--text-primary)]">{plan.name}</span>
-                            </label>
-                        ))}
-                    </div>
-                </div>
-            </div>
-            <div className="flex justify-end pt-6 mt-6 border-t border-[var(--light-bg)]">
-                <button type="submit" className="px-5 py-2 rounded-md bg-[var(--primary-color)] text-white font-medium hover:bg-[#128c7e] transition-colors">Save Changes</button>
-            </div>
-          </fieldset>
+              )}
+            </section>
+          </div>
+          <div className="flex items-center justify-end gap-3 sticky bottom-0 py-3 bg-[var(--medium-bg)]/95 backdrop-blur border-t border-[var(--light-bg)]">
+            {dirty && <span className="text-xs text-[var(--text-secondary)] mr-auto">Unsaved changes</span>}
+            <Button type="submit" disabled={!dirty}>Save changes</Button>
+          </div>
         </form>
 
-        <div className="mt-8 pt-6 border-t border-red-500/30">
-            <h4 className="text-lg font-semibold text-red-400 mb-4">Danger Zone</h4>
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 bg-red-900/20 border border-red-500/30 rounded-lg">
-                <div>
-                    <p className="font-medium text-red-300">Delete this project</p>
-                    <p className="text-sm text-red-400">Once you delete a project, there is no going back. Please be certain.</p>
-                </div>
-                <button onClick={handleDelete} className="px-4 py-2 rounded-md bg-red-600 text-white font-medium hover:bg-red-700 transition-colors flex-shrink-0">
-                    <i className="fas fa-trash-alt mr-2"></i>Delete Project
-                </button>
-            </div>
+        {SHOW_DELETE && (
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 p-4 border border-red-500/30 rounded-xl">
+          <div>
+            <p className="font-semibold text-red-500">Delete this project</p>
+            <p className="text-sm text-[var(--text-secondary)]">Removes the project and its inventory. This cannot be undone.</p>
+          </div>
+          <Button type="button" tone="danger" onClick={handleDelete}><i className="fas fa-trash-alt mr-2" aria-hidden="true"></i>Delete project</Button>
         </div>
-
+        )}
       </div>
     );
   };
@@ -451,6 +419,18 @@ const SetupView: React.FC<{
                 </div>
             </div>
 
+            {inventoryForView.length > 0 && (
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mb-3 text-xs text-[var(--text-secondary)]" aria-label="Legend">
+                    {(['Available', 'Booked', 'Sold', 'On Hold', 'Not for Sale'] as InventoryUnitStatus[]).map(st => (
+                        <button key={st} type="button" onClick={() => setStatusFilter(statusFilter === st ? 'All' : st)} aria-pressed={statusFilter === st}
+                            className={`flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-[var(--dark-bg)] ${statusFilter === st ? 'bg-[var(--dark-bg)] text-[var(--text-primary)] font-semibold' : ''}`}>
+                            <span className={`w-3 h-3 rounded-sm border ${getStatusColor(st)}`}></span>
+                            {st} <b className="text-[var(--text-primary)]">{inventoryForView.filter(u => u.status === st).length}</b>
+                        </button>
+                    ))}
+                </div>
+            )}
+
             {inventoryForView.length > 0 ? (
                 <div className="space-y-1 overflow-y-auto pr-2 pb-10 custom-scrollbar">
                     {sortedFloors.map(floorNum => {
@@ -466,8 +446,10 @@ const SetupView: React.FC<{
                                     {units.map(unit => (
                                         <div 
                                             key={unit.id}
+                                            role="button" tabIndex={0} aria-label={`Edit unit ${unit.unitNumber}, ${unit.status}`}
                                             onClick={() => setEditingUnit(unit)}
-                                            className={`relative p-2 rounded border shadow-sm transition-all hover:scale-105 cursor-pointer group/unit ${getStatusColor(unit.status)}`}
+                                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setEditingUnit(unit); } }}
+                                            className={`relative p-2 rounded border shadow-sm transition-all hover:ring-2 hover:ring-white/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-white cursor-pointer ${getStatusColor(unit.status)}`}
                                             title={`Unit: ${unit.unitNumber} \nType: ${unit.type} \nPrice: ${formatCurrency(unit.price)} \nStatus: ${unit.status}`}
                                         >
                                             <div className="flex justify-between items-start mb-1">
@@ -477,9 +459,6 @@ const SetupView: React.FC<{
                                             <div className="flex justify-between items-end">
                                                 <span className="text-[10px] opacity-75">{unit.area} sqft</span>
                                                 <span className="text-[10px] font-bold">{formatCurrency(unit.price)}</span>
-                                            </div>
-                                            <div className="absolute inset-0 bg-black/80 rounded flex items-center justify-center opacity-0 group-hover/unit:opacity-100 transition-opacity">
-                                                 <button className="text-xs bg-white text-black px-2 py-1 rounded font-bold hover:bg-gray-200">Edit</button>
                                             </div>
                                         </div>
                                     ))}
@@ -686,7 +665,7 @@ const SetupView: React.FC<{
                     <div className="text-center text-[var(--text-secondary)] mt-10 p-8 bg-[var(--dark-bg)] rounded-lg border-2 border-dashed border-[var(--light-bg)]">
                         <i className="fas fa-car-side text-4xl mb-4 opacity-50"></i>
                         <p className="font-semibold">No parking inventory found.</p>
-                        <p className="text-sm mt-1">Adjust filters or generate inventory.</p>
+                        <p className="text-sm mt-1">Parking slots are created with Generate Inventory on the Stacking Plan tab.</p>
                     </div>
                 ) : (
                     <div className="space-y-8">
@@ -757,17 +736,23 @@ const ProjectInventory: React.FC<ProjectInventoryProps> = ({ project, paymentPla
   return (
     <>
         <div className="flex flex-col h-full bg-[var(--medium-bg)] rounded-lg p-4">
-            <div className="flex justify-between items-center mb-4 flex-shrink-0">
-                <div>
-                    <button onClick={onBack} className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] mr-4 p-2 rounded-full hover:bg-[var(--light-bg)] transition-colors">
-                        <i className="fas fa-arrow-left"></i>
-                    </button>
-                    <h3 className="text-xl font-bold text-[var(--text-primary)] inline-block align-middle">{safeProject.name} - Inventory</h3>
+            <div className="flex items-start gap-3 mb-4 flex-shrink-0">
+                <button onClick={onBack} aria-label="Back to projects" className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] w-9 h-9 flex items-center justify-center rounded-full hover:bg-[var(--light-bg)] transition-colors flex-shrink-0">
+                    <i className="fas fa-arrow-left"></i>
+                </button>
+                <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-xl font-bold text-[var(--text-primary)] truncate">{safeProject.name}</h3>
+                        <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold text-white whitespace-nowrap ${safeProject.projectStatus === 'Ready to Move' ? 'bg-green-600' : safeProject.projectStatus === 'Under Construction' ? 'bg-yellow-600' : 'bg-blue-600'}`}>{safeProject.projectStatus}</span>
+                    </div>
+                    <p className="text-xs text-[var(--text-secondary)] mt-0.5 truncate">
+                        {[safeProject.location, safeProject.companyName, safeProject.projectType, safeProject.reraNumber && `RERA ${safeProject.reraNumber}`].filter(Boolean).join(' · ')}
+                    </p>
                 </div>
             </div>
 
             <div className="border-b border-[var(--light-bg)] mb-4 flex-shrink-0">
-                <nav className="flex space-x-4">
+                <nav className="flex space-x-1 overflow-x-auto" role="tablist">
                     <button onClick={() => setActiveTab('floor')} className={`py-2 px-4 text-sm font-medium flex items-center gap-2 ${activeTab === 'floor' ? 'text-[var(--primary-color)] border-b-2 border-[var(--primary-color)]' : 'text-[var(--text-secondary)] hover:text-[var(--primary-color)]'}`}>
                         <i className="fas fa-building"></i> Stacking Plan
                     </button>

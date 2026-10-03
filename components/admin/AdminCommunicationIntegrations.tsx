@@ -1,5 +1,6 @@
 
 import React from 'react';
+import { toast } from '../ui/Toast';
 
 interface ProviderItem {
     id: string;
@@ -12,31 +13,21 @@ interface ProviderItem {
 }
 
 const TELEPHONY_PROVIDERS: ProviderItem[] = [
-    { id: 'exotel', label: 'Exotel', icon: 'fas fa-phone-volume', color: 'text-indigo-600', category: 'Telephony', status: 'Connected', description: 'Cloud telephony & IVR solutions.' },
-    { id: 'knowlarity', label: 'Knowlarity', icon: 'fas fa-headset', color: 'text-blue-500', category: 'Telephony', status: 'Not Connected', description: 'Virtual numbers and IVR.' },
-    { id: 'ozonetel', label: 'Ozonetel', icon: 'fas fa-cloud', color: 'text-cyan-500', category: 'Telephony', status: 'Not Connected', description: 'Cloud communication platform.' },
+    { id: 'exotel', label: 'Exotel', icon: 'fas fa-phone-volume', color: 'text-indigo-600', category: 'Telephony', status: 'Coming Soon', description: 'Cloud telephony & IVR solutions.' },
+    { id: 'knowlarity', label: 'Knowlarity', icon: 'fas fa-headset', color: 'text-blue-500', category: 'Telephony', status: 'Coming Soon', description: 'Virtual numbers and IVR.' },
+    { id: 'ozonetel', label: 'Ozonetel', icon: 'fas fa-cloud', color: 'text-cyan-500', category: 'Telephony', status: 'Coming Soon', description: 'Cloud communication platform.' },
     { id: 'myoperator', label: 'MyOperator', icon: 'fas fa-mobile-alt', color: 'text-green-500', category: 'Telephony', status: 'Coming Soon', description: 'Call management system.' },
-    { id: 'airtel-iq', label: 'Airtel IQ', icon: 'fas fa-broadcast-tower', color: 'text-red-600', category: 'Telephony', status: 'Not Connected', description: 'Omnichannel cloud communications.' },
-    { id: 'pulse-iq', label: 'PulseIQ', icon: 'fas fa-wave-square', color: 'text-purple-500', category: 'Telephony', status: 'Coming Soon', description: 'Cloud telephony services.' },
-    { id: 'juscall', label: 'JusCall', icon: 'fas fa-phone-square', color: 'text-green-600', category: 'Telephony', status: 'Coming Soon', description: 'Global calling solution.' },
-    { id: 'jio-cc', label: 'Jio Contact Center', icon: 'fas fa-network-wired', color: 'text-blue-700', category: 'Telephony', status: 'Coming Soon', description: 'Contact center API.' },
 ];
 
 const WHATSAPP_PROVIDERS: ProviderItem[] = [
-    { id: 'meta-cloud', label: 'Meta Cloud API', icon: 'fab fa-meta', color: 'text-blue-600', category: 'WhatsApp', status: 'Connected', description: 'Direct API from Meta.' },
-    { id: 'wappbiz', label: 'WappBiz', icon: 'fab fa-whatsapp', color: 'text-green-500', category: 'WhatsApp', status: 'Not Connected', description: 'WhatsApp marketing tool.' },
-    { id: 'gupshup', label: 'Gupshup', icon: 'fas fa-comments', color: 'text-orange-500', category: 'WhatsApp', status: 'Not Connected', description: 'Conversational messaging.' },
-    { id: 'valuefirst-wa', label: 'ValueFirst', icon: 'fas fa-envelope-open', color: 'text-purple-600', category: 'WhatsApp', status: 'Coming Soon', description: 'Enterprise communication.' },
-    { id: 'twilio', label: 'Twilio', icon: 'fas fa-comment-dots', color: 'text-red-500', category: 'WhatsApp', status: 'Not Connected', description: 'API for WhatsApp & SMS.' },
-    { id: 'interakt', label: 'Interakt', icon: 'fas fa-check-double', color: 'text-green-600', category: 'WhatsApp', status: 'Connected', description: 'Official WhatsApp Business solution.' },
+    { id: 'meta-cloud', label: 'Meta Cloud API', icon: 'fab fa-meta', color: 'text-blue-600', category: 'WhatsApp', status: 'Coming Soon', description: 'Direct API from Meta.' },
+    { id: 'gupshup', label: 'Gupshup', icon: 'fas fa-comments', color: 'text-orange-500', category: 'WhatsApp', status: 'Coming Soon', description: 'Conversational messaging.' },
+    { id: 'interakt', label: 'Interakt', icon: 'fas fa-check-double', color: 'text-green-600', category: 'WhatsApp', status: 'Coming Soon', description: 'Official WhatsApp Business solution.' },
 ];
 
 const SMS_GATEWAYS: ProviderItem[] = [
-    { id: 'textlocal', label: 'Textlocal', icon: 'fas fa-comment-alt', color: 'text-gray-600', category: 'SMS', status: 'Connected', description: 'Bulk SMS platform.' },
-    { id: 'msg91', label: 'MSG91', icon: 'fas fa-sms', color: 'text-blue-400', category: 'SMS', status: 'Not Connected', description: 'Enterprise SMS solution.' },
-    { id: 'karix', label: 'Karix', icon: 'fas fa-paper-plane', color: 'text-purple-500', category: 'SMS', status: 'Coming Soon', description: 'Mobile engagement platform.' },
-    { id: 'valuefirst-sms', label: 'ValueFirst', icon: 'fas fa-envelope', color: 'text-indigo-500', category: 'SMS', status: 'Coming Soon', description: 'SMS gateway services.' },
-    { id: 'route-mobile', label: 'Route Mobile', icon: 'fas fa-route', color: 'text-teal-500', category: 'SMS', status: 'Coming Soon', description: 'Cloud communications.' },
+    { id: 'textlocal', label: 'Textlocal', icon: 'fas fa-comment-alt', color: 'text-gray-600', category: 'SMS', status: 'Coming Soon', description: 'Bulk SMS platform.' },
+    { id: 'msg91', label: 'MSG91', icon: 'fas fa-sms', color: 'text-blue-400', category: 'SMS', status: 'Coming Soon', description: 'Enterprise SMS solution.' },
 ];
 
 const ProviderCard: React.FC<{ item: ProviderItem }> = ({ item }) => (
@@ -64,7 +55,7 @@ const ProviderCard: React.FC<{ item: ProviderItem }> = ({ item }) => (
                 : 'bg-[var(--medium-bg)] text-[var(--text-primary)] hover:bg-[var(--primary-color)] hover:text-white border border-[var(--light-bg)] group-hover:border-[var(--primary-color)]'
             }`}
             disabled={item.status === 'Coming Soon'}
-            onClick={() => alert(`Configuring ${item.label}...`)}
+            onClick={() => toast.info(`${item.label} is coming soon.`)}
         >
             {item.status === 'Connected' ? 'Configure' : 'Connect'}
         </button>

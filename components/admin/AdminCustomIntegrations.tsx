@@ -1,5 +1,7 @@
 
 import React from 'react';
+import { toast } from '../ui/Toast';
+import { SHOW_DELETE } from '../../features';
 
 interface IntegrationMethod {
     id: string;
@@ -13,9 +15,6 @@ interface IntegrationMethod {
 const CUSTOM_METHODS: IntegrationMethod[] = [
     { id: 'rest-api', label: 'REST API', icon: 'fas fa-globe', color: 'text-blue-500', description: 'Full access programmatic API.', status: 'Active' },
     { id: 'webhooks', label: 'Webhooks', icon: 'fas fa-anchor', color: 'text-purple-500', description: 'Real-time event notifications.', status: 'Inactive' },
-    { id: 'json-push', label: 'JSON Push/Pull', icon: 'fas fa-file-code', color: 'text-yellow-500', description: 'Batch data sync via endpoints.', status: 'Inactive' },
-    { id: 'smtp-parse', label: 'SMTP Email Parsing', icon: 'fas fa-at', color: 'text-green-500', description: 'Extract leads from raw emails.', status: 'Active' },
-    { id: 'ftp-sync', label: 'FTP Inventory Sync', icon: 'fas fa-server', color: 'text-gray-400', description: 'Legacy system file sync.', status: 'Inactive' },
 ];
 
 const MethodCard: React.FC<{ item: IntegrationMethod }> = ({ item }) => (
@@ -36,13 +35,13 @@ const MethodCard: React.FC<{ item: IntegrationMethod }> = ({ item }) => (
         <div className="mt-4 pt-3 border-t border-[var(--light-bg)] flex gap-2">
             <button 
                 className="flex-1 py-1.5 rounded text-xs font-bold bg-[var(--medium-bg)] text-[var(--text-secondary)] hover:bg-[var(--light-bg)] hover:text-[var(--text-primary)] border border-[var(--light-bg)] transition-colors"
-                onClick={() => alert(`Docs for ${item.label} coming soon!`)}
+                onClick={() => toast.info(`${item.label} docs are coming soon.`)}
             >
                 Docs
             </button>
             <button 
                 className="flex-1 py-1.5 rounded text-xs font-bold bg-[var(--primary-color)]/10 text-[var(--primary-color)] hover:bg-[var(--primary-color)] hover:text-white border border-[var(--primary-color)]/20 transition-colors"
-                onClick={() => alert(`Configuration for ${item.label} coming soon!`)}
+                onClick={() => toast.info(`${item.label} is coming soon.`)}
             >
                 Configure
             </button>
@@ -58,7 +57,7 @@ const ApiKeyItem: React.FC<{ name: string; prefix: string; created: string }> = 
         </div>
         <div className="flex items-center gap-4 text-xs text-[var(--text-secondary)]">
             <span>Created: {created}</span>
-            <button className="text-red-400 hover:text-red-300"><i className="fas fa-trash-alt"></i></button>
+            {SHOW_DELETE && <button className="text-red-400 hover:text-red-300"><i className="fas fa-trash-alt"></i></button>}
         </div>
     </div>
 );

@@ -2,6 +2,7 @@
 import React from 'react';
 import { Project, InventoryUnit, ParkingSlot } from '../../types';
 import { v4 as uuidv4 } from 'uuid';
+import { confirmDialog } from '../ui/Confirm';
 
 interface GenerateInventoryModalProps {
   isOpen: boolean;
@@ -158,7 +159,7 @@ const GenerateInventoryModal: React.FC<GenerateInventoryModalProps> = ({ isOpen,
         }
     };
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError(null);
 
@@ -244,7 +245,7 @@ const GenerateInventoryModal: React.FC<GenerateInventoryModalProps> = ({ isOpen,
 
         if (existingUnitsInRange) {
             const wingMsg = effectiveWing === 'All' ? 'all wings' : (effectiveWing ? `Wing ${effectiveWing}` : 'the project');
-            if (!window.confirm(`This will overwrite existing units in ${wingMsg} for floors ${from}-${to}. Existing booking data for these units might be lost. Are you sure?`)) {
+            if (!(await confirmDialog({ title: 'Overwrite existing units?', message: `This will overwrite existing units in ${wingMsg} for floors ${from}-${to}. Booking data for these units might be lost.`, confirmLabel: 'Overwrite', danger: true }))) {
                 return;
             }
         }

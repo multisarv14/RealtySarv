@@ -1,5 +1,6 @@
 
 import React from 'react';
+import { toast } from '../ui/Toast';
 
 interface ProviderItem {
     id: string;
@@ -11,12 +12,9 @@ interface ProviderItem {
 }
 
 const ACCOUNTING_PROVIDERS: ProviderItem[] = [
-    { id: 'tally', label: 'Tally ERP / Prime', icon: 'fas fa-chart-bar', color: 'text-green-600', status: 'Connected', description: 'Market leading accounting software.' },
-    { id: 'sap', label: 'SAP', icon: 'fas fa-project-diagram', color: 'text-blue-700', status: 'Not Connected', description: 'Enterprise resource planning.' },
-    { id: 'oracle', label: 'Oracle NetSuite', icon: 'fas fa-database', color: 'text-red-600', status: 'Not Connected', description: 'Cloud business management suite.' },
-    { id: 'zoho-books', label: 'Zoho Books', icon: 'fas fa-book', color: 'text-blue-500', status: 'Connected', description: 'Online accounting software.' },
+    { id: 'tally', label: 'Tally ERP / Prime', icon: 'fas fa-chart-bar', color: 'text-green-600', status: 'Coming Soon', description: 'Market leading accounting software.' },
+    { id: 'zoho-books', label: 'Zoho Books', icon: 'fas fa-book', color: 'text-blue-500', status: 'Coming Soon', description: 'Online accounting software.' },
     { id: 'quickbooks', label: 'QuickBooks', icon: 'fas fa-file-invoice-dollar', color: 'text-green-500', status: 'Coming Soon', description: 'Small business accounting.' },
-    { id: 'marg', label: 'Marg ERP', icon: 'fas fa-desktop', color: 'text-orange-500', status: 'Coming Soon', description: 'Inventory & accounting software.' },
 ];
 
 const SYNC_FEATURES = [
@@ -53,7 +51,7 @@ const ProviderCard: React.FC<{ item: ProviderItem }> = ({ item }) => (
                 : 'bg-[var(--medium-bg)] text-[var(--text-primary)] hover:bg-[var(--primary-color)] hover:text-white border border-[var(--light-bg)] group-hover:border-[var(--primary-color)]'
             }`}
             disabled={item.status === 'Coming Soon'}
-            onClick={() => alert(`Configuration for ${item.label} coming soon!`)}
+            onClick={() => toast.info(`${item.label} is coming soon.`)}
         >
             {item.status === 'Connected' ? 'Configure' : 'Connect'}
         </button>

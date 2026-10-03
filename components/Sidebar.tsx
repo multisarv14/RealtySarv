@@ -25,6 +25,8 @@ interface SidebarProps {
   onToggleSiteVisitModal: (visitToEdit?: SiteVisit) => void;
   onToggleFollowUpModal: (context: ActiveMenu) => void;
   onNavigateToAdmin: () => void;
+  /** Screens this user may open; omit for all. 'Admin' controls the settings cog. */
+  allowedMenus?: string[];
   onLogout: () => void;
   onUpdateSiteVisitStatus: (leadId: string, visitId: string, newStatus: SiteVisitStatus) => void;
   onToggleBookingModal: (leadId: string) => void;
@@ -59,6 +61,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   onToggleSiteVisitModal,
   onToggleFollowUpModal,
   onNavigateToAdmin,
+  allowedMenus,
   onLogout,
   onUpdateSiteVisitStatus,
   onToggleBookingModal,
@@ -93,13 +96,17 @@ const Sidebar: React.FC<SidebarProps> = ({
   const [activeAgreementTab, setActiveAgreementTab] = React.useState<AgreementStatus>('Drafted');
   const [activePossessionTab, setActivePossessionTab] = React.useState<PossessionStatus | 'All'>('All');
 
-  const menuItems: { id: ActiveMenu; label: string; icon: string }[] = [
+  const allMenuItems: { id: ActiveMenu; label: string; icon: string }[] = [
     { id: 'Leads', label: 'Leads', icon: 'fas fa-users' },
     { id: 'Visits', label: 'Visits', icon: 'fas fa-map-marked-alt' },
     { id: 'Booking', label: 'Booking', icon: 'fas fa-file-signature' },
     { id: 'Agreement', label: 'Agreement', icon: 'fas fa-file-contract' },
     { id: 'Possession', label: 'Possession', icon: 'fas fa-key' },
   ];
+  const menuItems = allowedMenus ? allMenuItems.filter(m => allowedMenus.includes(m.id)) : allMenuItems;
+  React.useEffect(() => {
+    if (menuItems.length && !menuItems.some(m => m.id === activeMenu)) setActiveMenu(menuItems[0].id);
+  }, [allowedMenus]);
 
   const safeLeads = React.useMemo(() => leads || [], [leads]);
 
@@ -320,7 +327,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   return (
     <div className="bg-[var(--medium-bg)] w-full flex flex-col h-full border-r border-[var(--border-color)] overflow-hidden">
       {/* Menu Grid */}
-      <div className="border-b border-[var(--border-color)] bg-[var(--dark-bg)] grid grid-cols-5 flex-shrink-0">
+      <div className="border-b border-[var(--border-color)] bg-[var(--dark-bg)] grid flex-shrink-0" style={{ gridTemplateColumns: `repeat(${Math.max(menuItems.length, 1)}, minmax(0, 1fr))` }}>
         {menuItems.map(item => (
           <button key={item.id} onClick={() => { setActiveMenu(item.id); onClearSelection?.(); }} className={`flex flex-col items-center justify-center py-1.5 transition-colors border-b-2 ${activeMenu === item.id ? 'bg-[var(--light-bg)] text-[var(--primary-color)] border-[var(--primary-color)]' : 'text-[var(--text-secondary)] border-transparent hover:text-[var(--text-primary)]'}`}>
               <i className={`${item.icon} text-[13px] mb-0.5`} aria-hidden="true"></i>
@@ -494,7 +501,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             </div>
           </div>
           <div className="flex gap-1 shrink-0">
-              <button onClick={onNavigateToAdmin} aria-label="Admin settings" title="Admin settings" className="h-8 w-8 rounded flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--primary-color)] transition-colors"><i className="fas fa-cog text-xs" aria-hidden="true"></i></button>
+              {(!allowedMenus || allowedMenus.includes('Admin')) && <button onClick={onNavigateToAdmin} aria-label="Admin settings" title="Admin settings" className="h-8 w-8 rounded flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--primary-color)] transition-colors"><i className="fas fa-cog text-xs" aria-hidden="true"></i></button>}
               <button onClick={onLogout} aria-label="Sign out" title="Sign out" className="h-8 w-8 rounded flex items-center justify-center text-[var(--text-secondary)] hover:text-red-500 transition-colors"><i className="fas fa-sign-out-alt text-xs" aria-hidden="true"></i></button>
           </div>
       </div>

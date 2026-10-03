@@ -19,6 +19,8 @@ import { currentTenant, tenantUrl, mainSiteUrl } from './tenant';
 import WorkspaceFinder from './components/WorkspaceFinder';
 import { PlanId } from './plans';
 import { notifyAll } from './liveQuery';
+import { toast } from './components/ui/Toast';
+import { accessFor } from './access';
 
 const getInitialTheme = (): string => {
   try {
@@ -81,6 +83,7 @@ const App: React.FC = () => {
   const userRoleSettings = useLiveQuery(() => db.userRoleSettings.toArray(), []);
   const userDesignations = useLiveQuery(() => db.userDesignations.toArray(), []);
   const channelPartners = useLiveQuery(() => db.channelPartners.toArray(), []);
+  const distributionRules = useLiveQuery(() => db.distributionRules.toArray(), []);
   const formFieldConfigs = useLiveQuery(() => db.formFieldConfigs.toArray(), []);
   const companyProfile = useLiveQuery(async () => (await db.companyProfile.toArray())[0]);
   const financialSettings = useLiveQuery(async () => (await db.financialSettings.toArray())[0]);
@@ -159,10 +162,13 @@ const App: React.FC = () => {
     if (viewState !== 'authenticated') { setWorkspaceInfo(null); return; }
     authApi.workspace().then(setWorkspaceInfo).catch(() => setWorkspaceInfo(null));
   }, [viewState]);
-  const lockedSystems: SystemType[] = workspaceInfo?.modules?.erp === false ? ['ProjectSarv', 'FinanceSarv'] : [];
+  const access = React.useMemo(() => accessFor(currentUser?.role, userRoleSettings), [currentUser?.role, userRoleSettings]);
+  const lockedSystems: SystemType[] = (['ProjectSarv', 'FinanceSarv'] as SystemType[]).filter(
+    (s) => workspaceInfo?.modules?.erp === false || !access.has(s));
   React.useEffect(() => {
     if (lockedSystems.includes(activeSystem)) setActiveSystem('LeadSarv');
-  }, [workspaceInfo, activeSystem]);
+    if (!access.has('Admin') && currentAppView === 'admin') setCurrentAppView('main');
+  }, [workspaceInfo, activeSystem, access, currentAppView]);
 
   const handleLoginSuccess = (user: User) => {
     setCurrentUser(user);
@@ -236,7 +242,7 @@ const App: React.FC = () => {
     budgets === undefined || clientProfiles === undefined || unitTypes === undefined || locationSettings === undefined || livingPlaces === undefined ||
     leadStatusTypes === undefined || siteVisitStatusTypes === undefined || taskPriorityTypes === undefined || bookingStatusTypes === undefined ||
     agreementStatusTypes === undefined || possessionStatusTypes === undefined || inventoryStatusTypes === undefined || projectTypeTypes === undefined ||
-    projectStatusTypes === undefined || userRoleSettings === undefined || userDesignations === undefined || companyProfile === undefined || financialSettings === undefined || applicationSettings === undefined || channelPartners === undefined || formFieldConfigs === undefined
+    projectStatusTypes === undefined || userRoleSettings === undefined || userDesignations === undefined || companyProfile === undefined || financialSettings === undefined || applicationSettings === undefined || channelPartners === undefined || distributionRules === undefined || formFieldConfigs === undefined
   ) {
     return <div className="flex h-screen w-screen justify-center items-center bg-[var(--dark-bg)] text-white">Loading your workspace...</div>;
   }
@@ -256,6 +262,10 @@ const App: React.FC = () => {
       return (
         <MainAppContainer
           currentUser={currentUser}
+          allowedMenus={[...access]}
+          channelPartners={channelPartners}
+          distributionRules={distributionRules}
+          onSaveDistributionRule={async (r) => { await db.distributionRules.put(r); }}
           leads={leads}
           users={users}
           projects={projects}
@@ -281,8 +291,12 @@ const App: React.FC = () => {
 
     return (
       <AdminPanel
+        currentUserId={currentUser?.id}
+        distributionRules={distributionRules}
+        onSaveDistributionRule={async (r) => { await db.distributionRules.put(r); }}
+        onMergeLeads={async (primary, removeIds) => { await db.leads.put(primary); for (const id of removeIds) await db.leads.delete(id); }}
         leads={leads} onUpdateLeads={handleLeadsUpdate}
-        users={users} onUpdateUsers={handleUsersUpdate} onAddUser={async (u) => await db.users.add({ id: uuidv4(), ...u, isActive: true, assignedProjectIds: [] })} onUpdateUser={async (u) => { try { await db.users.put(u); } catch (e: any) { window.alert(e?.message || 'Could not save the user.'); } }}
+        users={users} onUpdateUsers={handleUsersUpdate} onAddUser={async (u) => await db.users.add({ id: uuidv4(), ...u, isActive: true, assignedProjectIds: [] })} onUpdateUser={async (u) => { try { await db.users.put(u); } catch (e: any) { toast.error(e?.message || 'Could not save the user.'); } }}
         sources={sources} onUpdateSources={async (s) => await db.sources.bulkPut(s)} onAddSource={async (s) => await db.sources.add({ id: uuidv4(), ...s })}
         projects={projects} onUpdateProjects={handleProjectsUpdate} onAddProject={async (p) => await db.projects.add({ id: uuidv4(), ...p, inventory: [], parkingInventory: [] })} onDeleteProject={async (id) => await db.projects.delete(id)}
         templates={templates} onUpdateTemplates={async (t) => await db.templates.bulkPut(t)} onAddTemplate={async (t) => await db.templates.add({ id: uuidv4(), ...t })}
@@ -302,7 +316,7 @@ const App: React.FC = () => {
         inventoryStatusTypes={inventoryStatusTypes} onUpdateInventoryStatusTypes={async (i) => await db.inventoryStatusTypes.bulkPut(i)} onAddInventoryStatusType={async (i) => await db.inventoryStatusTypes.add({ id: uuidv4(), ...i })}
         projectTypeTypes={projectTypeTypes} onUpdateProjectTypeTypes={async (p) => await db.projectTypeTypes.bulkPut(p)} onAddProjectTypeType={async (p) => await db.projectTypeTypes.add({ id: uuidv4(), ...p })}
         projectStatusTypes={projectStatusTypes} onUpdateProjectStatusTypes={async (p) => await db.projectStatusTypes.bulkPut(p)} onAddProjectStatusType={async (p) => await db.projectStatusTypes.add({ id: uuidv4(), ...p })}
-        userRoleSettings={userRoleSettings} onUpdateUserRoleSettings={async (u) => await db.userRoleSettings.bulkPut(u)} onAddUserRoleSetting={async (u) => await db.userRoleSettings.add({ id: uuidv4(), ...u, menuAccess: [] })} onUpdateUserRoleMenuAccess={async (id, m) => await db.userRoleSettings.update(id, { menuAccess: m })}
+        userRoleSettings={userRoleSettings} onSaveRoleAccess={async (r) => await db.userRoleSettings.put(r)} erpLocked={workspaceInfo?.modules?.erp === false}
         userDesignations={userDesignations} onUpdateUserDesignations={async (u) => await db.userDesignations.bulkPut(u)} onAddUserDesignation={async (u) => await db.userDesignations.add({ id: uuidv4(), ...u })}
         companyProfile={companyProfile} onUpdateCompanyProfile={async (p) => { if (p) await db.companyProfile.put(p); }}
         financialSettings={financialSettings} onUpdateFinancialSettings={async (s) => { if (s) await db.financialSettings.put(s); }}
@@ -325,6 +339,7 @@ const App: React.FC = () => {
           onGoToAdmin={() => setCurrentAppView('admin')}
           currentAppView={currentAppView}
           lockedSystems={lockedSystems}
+          canOpenAdmin={access.has('Admin')}
         />
       )}
 

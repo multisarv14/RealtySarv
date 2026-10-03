@@ -30,7 +30,8 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({ activeSection, onSelectSect
     }
 
     if (section.subItems) {
-      setExpandedSection(prev => (prev === section.id ? null : (section.id as AdminPanelSection)));
+      // Open the group when arriving from elsewhere; collapse only when clicking the group you are already in.
+      setExpandedSection(prev => (prev === section.id && activeSection === section.id ? null : (section.id as AdminPanelSection)));
       // If expanding a new section, and it wasn't the active one, switch to it
       if (activeSection !== section.id) {
           onSelectSection(section.id as AdminPanelSection);
@@ -67,11 +68,11 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({ activeSection, onSelectSect
                 onClick={() => handleSectionClick(section)}
               >
                 <div className={`flex items-center gap-3 ${isCollapsed ? 'w-full justify-center' : ''}`}>
-                  <i className={`${section.icon} text-base w-5 text-center`}></i>
+                  <i className={`${section.icon} text-base w-5 text-center`} aria-hidden="true"></i>
                   {!isCollapsed && <span className="whitespace-nowrap">{section.label}</span>}
                 </div>
                 {!isCollapsed && section.subItems && (
-                  <i className={`fas fa-chevron-right transition-transform text-[8px] ${expandedSection === section.id ? 'rotate-90' : ''}`}></i>
+                  <i className={`fas fa-chevron-right transition-transform text-[8px] ${expandedSection === section.id ? 'rotate-90' : ''}`} aria-hidden="true"></i>
                 )}
               </button>
               {!isCollapsed && section.subItems && expandedSection === section.id && (
@@ -86,7 +87,7 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({ activeSection, onSelectSect
                         }`}
                         onClick={(e) => handleSubItemClick(section.id as AdminPanelSection, subItem.id, e)}
                       >
-                        <i className={`${subItem.icon} w-4 text-center opacity-70`}></i>
+                        <i className={`${subItem.icon} w-4 text-center opacity-70`} aria-hidden="true"></i>
                         {subItem.label}
                       </button>
                     </li>

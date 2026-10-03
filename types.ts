@@ -123,10 +123,10 @@ export interface DemandRecord { milestoneId: string; generatedDate: string; dueD
 export interface Nominee { fullName: string; relationship: string; address: string; contact: string; }
 export interface BookingDetails { primaryApplicant: Applicant; coApplicants: Applicant[]; unitId: string; parkingId: string; priceBreakup: PriceBreakup; paymentPlanId: string; tokenDetails: TokenDetails; payments?: PaymentRecord[]; demands?: DemandRecord[]; settlementMapping?: Record<string, number>; nominee?: Nominee; declarationAccepted: boolean; customData?: Record<string, any>; unitDocuments?: Record<string, CustomerDocument>; }
 
-export interface Lead { id: string; name: string; avatarInitials: string; lastMessage: string; time: string; chatStatus: 'online' | 'offline'; leadStatus: LeadStatus; read: boolean; messages: Message[]; email: string; phone: string; initialInterest: string[]; siteVisits: SiteVisit[]; tasks: Task[]; channelSource: string; leadSource: string; preferredLocation: string; budget?: string; clientProfile?: string; livingPlace?: string; propertyImages: PropertyImage[]; ownerId: string; leadProject: string; leadDate: string; bookingStatus: BookingStatus; agreementStatus: AgreementStatus; possessionStatus: PossessionStatus; tokenAmount?: number; bookingDetails?: BookingDetails; customData?: Record<string, any>; }
+export interface Lead { id: string; name: string; avatarInitials: string; lastMessage: string; time: string; chatStatus: 'online' | 'offline'; leadStatus: LeadStatus; read: boolean; messages: Message[]; email: string; phone: string; initialInterest: string[]; siteVisits: SiteVisit[]; tasks: Task[]; channelSource: string; leadSource: string; preferredLocation: string; budget?: string; clientProfile?: string; livingPlace?: string; propertyImages: PropertyImage[]; ownerId: string; channelPartnerId?: string; leadProject: string; leadDate: string; bookingStatus: BookingStatus; agreementStatus: AgreementStatus; possessionStatus: PossessionStatus; tokenAmount?: number; bookingDetails?: BookingDetails; customData?: Record<string, any>; }
 
 export type ActiveLeadTab = 'Follow-up' | 'Active' | 'Inactive';
-export type AdminPanelSection = 'leads' | 'users' | 'projects' | 'channel-partners' | 'integrations' | 'lead-flow' | 'task-management' | 'reporting' | 'settings';
+export type AdminPanelSection = 'users' | 'operations' | 'projects' | 'channel-partners' | 'integrations' | 'reporting' | 'settings';
 
 export interface IntegrationOptionType {
   icon: string;
@@ -135,7 +135,7 @@ export interface IntegrationOptionType {
 }
 
 // --- New Data Interfaces (for Modals) ---
-export interface NewLeadData { ownerId?: string; firstName: string; lastName: string; email: string; phone: string; initialInterest: string[]; preferredLocation: string; budget: string; clientProfile: string; livingPlace: string; leadStatus: LeadStatus; channelSource: string; sourceName: string; leadProject: string; message?: string; customData?: Record<string, any>; followUp?: NewFollowUpData; }
+export interface NewLeadData { ownerId?: string; channelPartnerId?: string; firstName: string; lastName: string; email: string; phone: string; initialInterest: string[]; preferredLocation: string; budget: string; clientProfile: string; livingPlace: string; leadStatus: LeadStatus; channelSource: string; sourceName: string; leadProject: string; message?: string; customData?: Record<string, any>; followUp?: NewFollowUpData; }
 export interface NewSiteVisitData { date: string; time: string; propertyOfInterest: string; notes?: string; }
 export interface NewTaskData { title: string; description?: string; dueDate: string; priority: TaskPriority; assignedTo: string; }
 export interface NewFollowUpData { type: 'Call' | 'Email' | 'Meeting'; date: string; time: string; notes?: string; assignedTo: string; }
@@ -143,6 +143,8 @@ export interface NewUserData extends Omit<User, 'id' | 'isActive'> { confirmPass
 export interface NewSourceData { channelSource: string; name: string; description?: string; }
 export interface NewProjectData extends Omit<Project, 'id' | 'inventory' | 'parkingInventory' | 'paymentPlanIds' | 'floorPlanUrl'> {}
 export interface NewTemplateData { name: string; type: TemplateType; content: string; }
+/** Decides who gets a new lead. The first enabled rule that matches wins. */
+export interface DistributionRule { id: string; name: string; enabled: boolean; mode: 'Round robin' | 'Least loaded'; projects: string[]; sources: string[]; assignees: string[]; cursor?: number; position?: number; }
 export interface NewChannelPartnerData { firmName: string; contactPerson: string; email: string; phone: string; reraNumber: string; commissionRate: number; }
 export interface NewBudgetData { name: string; description?: string; }
 export interface NewClientProfileData { name: string; description?: string; }

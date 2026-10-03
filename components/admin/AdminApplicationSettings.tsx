@@ -1,6 +1,7 @@
 
 import React from 'react';
 import { ApplicationSettings } from '../../types';
+import { toast } from '../ui/Toast';
 
 interface AdminApplicationSettingsProps {
   settings: ApplicationSettings;
@@ -22,7 +23,7 @@ const AdminApplicationSettings: React.FC<AdminApplicationSettingsProps> = ({ set
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onUpdateSettings(formData);
-    alert('Application settings updated successfully!');
+    toast.success('Application settings saved.');
   };
 
   return (

@@ -1,23 +1,26 @@
 
 import React from 'react';
-import { AdminPanelSection, Lead, User, NewUserData, NewSourceData, Project, NewProjectData, Source, Budget, NewBudgetData, ClientProfile, NewClientProfileData, UnitType, NewUnitTypeData, LocationSetting, NewLocationSettingData, LivingPlace, NewLivingPlaceData, Template, NewTemplateData, LeadStatusType, SiteVisitStatusType, TaskPriorityType, BookingStatusType, AgreementStatusType, PossessionStatusType, InventoryStatusType, ProjectTypeType, ProjectStatusType, NewLeadStatusTypeData, NewSiteVisitStatusTypeData, NewTaskPriorityTypeData, NewBookingStatusTypeData, NewAgreementStatusTypeData, NewPossessionStatusTypeData, NewInventoryStatusTypeData, NewProjectTypeTypeData, NewProjectStatusTypeData, UserRoleSetting, NewUserRoleSettingData, UserDesignation, NewUserDesignationData, CompanyProfile, PaymentPlan, FinancialSettings, ApplicationSettings, ChannelPartner, NewChannelPartnerData, FormFieldConfig } from '../../types';
+import { AdminPanelSection, Lead, User, NewUserData, NewSourceData, Project, NewProjectData, Source, Budget, NewBudgetData, ClientProfile, NewClientProfileData, UnitType, NewUnitTypeData, LocationSetting, NewLocationSettingData, LivingPlace, NewLivingPlaceData, Template, NewTemplateData, LeadStatusType, SiteVisitStatusType, TaskPriorityType, BookingStatusType, AgreementStatusType, PossessionStatusType, InventoryStatusType, ProjectTypeType, ProjectStatusType, NewLeadStatusTypeData, NewSiteVisitStatusTypeData, NewTaskPriorityTypeData, NewBookingStatusTypeData, NewAgreementStatusTypeData, NewPossessionStatusTypeData, NewInventoryStatusTypeData, NewProjectTypeTypeData, NewProjectStatusTypeData, UserRoleSetting, NewUserRoleSettingData, UserDesignation, NewUserDesignationData, CompanyProfile, PaymentPlan, FinancialSettings, ApplicationSettings, ChannelPartner, NewChannelPartnerData, FormFieldConfig, DistributionRule } from '../../types';
 import AdminSidebar from './AdminSidebar';
-import AdminLeadManagement from './AdminLeadManagement';
+import { Toaster } from '../ui/Toast';
+import { ConfirmHost } from '../ui/Confirm';
 import AdminUserManagement from './AdminUserManagement';
 import AdminSourceManagement from './AdminSourceManagement';
 import AdminProjectManagement from './AdminProjectManagement';
 import AdminGenericSettingManagement from './AdminGenericSettingManagement';
 import AdminConnectSarv from './AdminConnectSarv';
 import AdminTemplateManagement from './AdminTemplateManagement';
-import AdminLeadFlow from './AdminLeadFlow';
-import AdminTaskManagement from './AdminTaskManagement';
 import AdminCompanyProfile from './AdminCompanyProfile';
 import AdminBilling from './AdminBilling';
 import AdminReporting from './AdminReporting';
 import AdminPaymentPlanManagement from './AdminPaymentPlanManagement';
 import AdminFinancialSettings from './AdminFinancialSettings';
 import AdminAppearanceSettings from './AdminAppearanceSettings';
-import AdminDigitalMarketing from './AdminDigitalMarketing';
+import AdminRoleAccess from './AdminRoleAccess';
+import AdminLeadTransfer from './AdminLeadTransfer';
+import AdminLeadMerge from './AdminLeadMerge';
+import AdminDistributionRules from './AdminDistributionRules';
+import OrganizationChart from './OrganizationChart';
 import AdminApplicationSettings from './AdminApplicationSettings';
 import AdminDashboard from './AdminDashboard';
 import AdminLeadIntegrations from './AdminLeadIntegrations';
@@ -27,12 +30,17 @@ import AdminAccountingIntegrations from './AdminAccountingIntegrations';
 import AdminPaymentIntegrations from './AdminPaymentIntegrations';
 import AdminMarketingIntegrations from './AdminMarketingIntegrations';
 import AdminStorageIntegrations from './AdminStorageIntegrations';
-import AdminTaskIntegrations from './AdminTaskIntegrations';
 import AdminCustomIntegrations from './AdminCustomIntegrations';
 import AdminChannelPartnerManagement from './AdminChannelPartnerManagement';
 import AdminFormFieldCustomization from './AdminFormFieldCustomization';
 
 interface AdminPanelProps {
+  currentUserId?: string;
+  onSaveRoleAccess: (role: UserRoleSetting) => Promise<unknown> | void;
+  erpLocked?: boolean;
+  distributionRules: DistributionRule[];
+  onSaveDistributionRule: (rule: DistributionRule) => Promise<unknown> | void;
+  onMergeLeads: (primary: Lead, removeIds: string[]) => Promise<unknown> | void;
   leads: Lead[];
   onUpdateLeads: (updatedLeads: Lead[]) => void;
   users: User[];
@@ -95,9 +103,6 @@ interface AdminPanelProps {
   onUpdateProjectStatusTypes: (updated: ProjectStatusType[]) => void;
   onAddProjectStatusType: (data: NewProjectStatusTypeData) => void;
   userRoleSettings: UserRoleSetting[];
-  onUpdateUserRoleSettings: (updated: UserRoleSetting[]) => void;
-  onAddUserRoleSetting: (data: NewUserRoleSettingData) => void;
-  onUpdateUserRoleMenuAccess: (roleId: string, menus: string[]) => void;
   userDesignations: UserDesignation[];
   onUpdateUserDesignations: (updated: UserDesignation[]) => void;
   onAddUserDesignation: (data: NewUserDesignationData) => void;
@@ -120,7 +125,12 @@ interface AdminPanelProps {
   onLogout: () => void;
 }
 
-type SettingsTab = 'lead' | 'project' | 'booking' | 'user' | 'company' | 'forms';
+type SettingsTab = 'lead' | 'booking' | 'company' | 'forms';
+
+const SECTION_TITLES: Record<string, string> = {
+  dashboard: 'Dashboard', users: 'Users', projects: 'Projects', 'channel-partners': 'Partners',
+  integrations: 'Integrations', reporting: 'Reports', operations: 'Operations', settings: 'Settings',
+};
 
 const AdminPanel: React.FC<AdminPanelProps> = (props) => {
   const [activeSection, setActiveSection] = React.useState<AdminPanelSection | 'dashboard'>('dashboard');
@@ -132,7 +142,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
 
   const handleSelectSection = (section: AdminPanelSection | 'dashboard', subSection?: string) => {
     setActiveSection(section);
-    setActiveSubSection(subSection || null);
+    setActiveSubSection(subSection || (section === 'users' || section === 'projects' ? 'list' : section === 'operations' ? 'transfer' : null));
     if (section !== 'settings') setActiveSetting(null);
     setIsSidebarOpen(false);
   };
@@ -177,18 +187,26 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
     switch (activeSection) {
       case 'dashboard':
         return <AdminDashboard leads={props.leads} projects={props.projects} users={props.users} onAddUser={() => setActiveSection('users')} onAddProject={() => setActiveSection('projects')} onViewReports={() => setActiveSection('reporting')} />;
-      case 'leads':
-        return <AdminLeadManagement leads={props.leads} onUpdateLeads={props.onUpdateLeads} />;
-      case 'lead-flow':
-        return <AdminLeadFlow leads={props.leads} users={props.users} onUpdateLeads={props.onUpdateLeads} />;
-      case 'task-management':
-        return <AdminTaskManagement leads={props.leads} users={props.users} onUpdateLeads={props.onUpdateLeads} />;
       case 'users':
-        return <AdminUserManagement users={props.users} onUpdateUsers={props.onUpdateUsers} onAddUser={props.onAddUser} onUpdateUser={props.onUpdateUser} projects={props.projects} />;
+        if (activeSubSection === 'access') return <AdminRoleAccess settings={props.userRoleSettings} users={props.users} onSave={props.onSaveRoleAccess} erpLocked={props.erpLocked} />;
+        if (activeSubSection === 'designations') return <AdminGenericSettingManagement title="Designations" itemNoun="Designation" items={props.userDesignations} onUpdateItems={props.onUpdateUserDesignations} onAddItem={props.onAddUserDesignation} />;
+        if (activeSubSection === 'chart') return <div className="p-4 bg-[var(--medium-bg)] rounded-lg shadow-md h-full overflow-auto org-chart-container"><h3 className="text-xl font-bold text-[var(--text-primary)] mb-4">Org chart</h3><OrganizationChart users={props.users || []} /></div>;
+        return <AdminUserManagement currentUserId={props.currentUserId} users={props.users} onUpdateUsers={props.onUpdateUsers} onAddUser={props.onAddUser} onUpdateUser={props.onUpdateUser} projects={props.projects} />;
       case 'projects':
-        return <AdminProjectManagement projects={props.projects} onUpdateProjects={props.onUpdateProjects} onAddProject={props.onAddProject} onDeleteProject={props.onDeleteProject} paymentPlans={props.paymentPlans} />;
+        switch (activeSubSection) {
+          case 'types': return <AdminGenericSettingManagement title="Project types" itemNoun="Project Type" items={props.projectTypeTypes} onUpdateItems={props.onUpdateProjectTypeTypes} onAddItem={props.onAddProjectTypeType} />;
+          case 'statuses': return <AdminGenericSettingManagement title="Construction stages" itemNoun="Project Status" items={props.projectStatusTypes} onUpdateItems={props.onUpdateProjectStatusTypes} onAddItem={props.onAddProjectStatusType} />;
+          case 'unit-types': return <AdminGenericSettingManagement title="Unit types" itemNoun="Unit Type" items={props.unitTypes} onUpdateItems={props.onUpdateUnitTypes} onAddItem={props.onAddUnitType} />;
+          case 'inventory': return <AdminGenericSettingManagement title="Inventory states" itemNoun="Inventory Status" items={props.inventoryStatusTypes} onUpdateItems={props.onUpdateInventoryStatusTypes} onAddItem={props.onAddInventoryStatusType} />;
+          case 'payment-plans': return <AdminPaymentPlanManagement plans={props.paymentPlans} onUpdatePlans={props.onUpdatePaymentPlans} onDeletePlan={props.onDeletePaymentPlan} />;
+          default: return <AdminProjectManagement projects={props.projects} onUpdateProjects={props.onUpdateProjects} onAddProject={props.onAddProject} onDeleteProject={props.onDeleteProject} paymentPlans={props.paymentPlans} />;
+        }
       case 'channel-partners':
-        return <AdminChannelPartnerManagement partners={props.channelPartners} onAddPartner={props.onAddChannelPartner} onUpdatePartners={props.onUpdateChannelPartners} />;
+        return <AdminChannelPartnerManagement leads={props.leads} partners={props.channelPartners} onAddPartner={props.onAddChannelPartner} onUpdatePartners={props.onUpdateChannelPartners} />;
+      case 'operations':
+        if (activeSubSection === 'merge') return <AdminLeadMerge leads={props.leads} users={props.users} onMergeLeads={props.onMergeLeads} />;
+        if (activeSubSection === 'distribution') return <AdminDistributionRules rules={props.distributionRules} users={props.users} projects={props.projects} sources={props.sources} leads={props.leads} onSaveRule={props.onSaveDistributionRule} />;
+        return <AdminLeadTransfer leads={props.leads} users={props.users} projects={(props.projects || []).map(p => p.name)} currentUserId={props.currentUserId} onUpdateLeads={props.onUpdateLeads} />;
       case 'reporting':
         return <AdminReporting leads={props.leads} projects={props.projects} />;
       case 'integrations':
@@ -201,14 +219,9 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
             case 'accounting': return <AdminAccountingIntegrations />;
             case 'marketing': return <AdminMarketingIntegrations />;
             case 'storage': return <AdminStorageIntegrations />;
-            case 'project-management': return <AdminTaskIntegrations />;
             case 'custom': return <AdminCustomIntegrations />;
             case 'templates': return <AdminTemplateManagement templates={props.templates} onUpdateTemplates={props.onUpdateTemplates} onAddTemplate={props.onAddTemplate} />;
             case 'email': return <AdminConnectSarv activeItem="email" />;
-            case 'meta':
-            case 'google':
-            case 'linkedin':
-                return <AdminDigitalMarketing activeItem={activeSubSection} projects={props.projects} users={props.users} />;
             default: return <div className="p-10 text-center text-gray-500">Integration setting for "{activeSubSection}" is coming soon.</div>;
         }
       case 'settings':
@@ -217,7 +230,6 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                 case 'sources': return <AdminSourceManagement sources={props.sources} onUpdateSources={props.onUpdateSources} onAddSource={props.onAddSource} />;
                 case 'budgets': return <AdminGenericSettingManagement title="Budget Management" itemNoun="Budget" items={props.budgets} onUpdateItems={props.onUpdateBudgets} onAddItem={props.onAddBudget} />;
                 case 'client-profiles': return <AdminGenericSettingManagement title="Client Profile Management" itemNoun="Profile" items={props.clientProfiles} onUpdateItems={props.onUpdateClientProfiles} onAddItem={props.onAddClientProfile} />;
-                case 'unit-types': return <AdminGenericSettingManagement title="Unit Type Management" itemNoun="Unit Type" items={props.unitTypes} onUpdateItems={props.onUpdateUnitTypes} onAddItem={props.onAddUnitType} />;
                 case 'locations': return <AdminGenericSettingManagement title="Preferred Location Management" itemNoun="Location" items={props.locationSettings} onUpdateItems={props.onUpdateLocationSettings} onAddItem={props.onAddLocationSetting} />;
                 case 'living-places': return <AdminGenericSettingManagement title="Current Living Place Management" itemNoun="Living Place" items={props.livingPlaces} onUpdateItems={props.onUpdateLivingPlaces} onAddItem={props.onAddLivingPlace} />;
                 case 'lead-statuses': return <AdminGenericSettingManagement title="Lead Status Management" itemNoun="Lead Status" items={props.leadStatusTypes} onUpdateItems={props.onUpdateLeadStatusTypes} onAddItem={props.onAddLeadStatusType} />;
@@ -226,14 +238,8 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                 case 'booking-statuses': return <AdminGenericSettingManagement title="Booking Status Management" itemNoun="Booking Status" items={props.bookingStatusTypes} onUpdateItems={props.onUpdateBookingStatusTypes} onAddItem={props.onAddBookingStatusType} />;
                 case 'agreement-statuses': return <AdminGenericSettingManagement title="Agreement Status Management" itemNoun="Agreement Status" items={props.agreementStatusTypes} onUpdateItems={props.onUpdateAgreementStatusTypes} onAddItem={props.onAddAgreementStatusType} />;
                 case 'possession-statuses': return <AdminGenericSettingManagement title="Possession Status Management" itemNoun="Possession Status" items={props.possessionStatusTypes} onUpdateItems={props.onUpdatePossessionStatusTypes} onAddItem={props.onAddPossessionStatusType} />;
-                case 'inventory-statuses': return <AdminGenericSettingManagement title="Inventory Status Management" itemNoun="Inventory Status" items={props.inventoryStatusTypes} onUpdateItems={props.onUpdateInventoryStatusTypes} onAddItem={props.onAddInventoryStatusType} />;
-                case 'project-types': return <AdminGenericSettingManagement title="Project Type Management" itemNoun="Project Type" items={props.projectTypeTypes} onUpdateItems={props.onUpdateProjectTypeTypes} onAddItem={props.onAddProjectTypeType} />;
-                case 'project-statuses': return <AdminGenericSettingManagement title="Project Status Management" itemNoun="Project Status" items={props.projectStatusTypes} onUpdateItems={props.onUpdateProjectStatusTypes} onAddItem={props.onAddProjectStatusType} />;
-                case 'user-roles': return <AdminGenericSettingManagement title="User Roles & Permissions" itemNoun="User Role" items={props.userRoleSettings} onUpdateItems={props.onUpdateUserRoleSettings} onAddItem={props.onAddUserRoleSetting} onUpdateMenuAccess={props.onUpdateUserRoleMenuAccess} />;
-                case 'user-designations': return <AdminGenericSettingManagement title="User Designations" itemNoun="Designation" items={props.userDesignations} onUpdateItems={props.onUpdateUserDesignations} onAddItem={props.onAddUserDesignation} />;
                 case 'company-profile': return <AdminCompanyProfile profile={props.companyProfile} onUpdateProfile={props.onUpdateCompanyProfile} formConfigs={props.formFieldConfigs} />;
                 case 'billing': return <AdminBilling />;
-                case 'payment-plans': return <AdminPaymentPlanManagement plans={props.paymentPlans} onUpdatePlans={props.onUpdatePaymentPlans} onDeletePlan={props.onDeletePaymentPlan} />;
                 case 'financial-settings': return <AdminFinancialSettings settings={props.financialSettings} onUpdateSettings={props.onUpdateFinancialSettings} />;
                 case 'application-settings': return <AdminApplicationSettings settings={props.applicationSettings} onUpdateSettings={props.onUpdateApplicationSettings} />;
                 case 'appearance': return <AdminAppearanceSettings profile={props.companyProfile} onUpdateProfile={props.onUpdateCompanyProfile} themeColor={props.themeColor} onThemeColorChange={props.onThemeColorChange} themeMode={props.themeMode} onThemeModeChange={props.onThemeModeChange} />;
@@ -246,9 +252,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
             <div className="border-b border-[var(--light-bg)] mb-8 -mx-4 px-4 flex-shrink-0">
                 <nav className="flex space-x-2 overflow-x-auto no-scrollbar">
                     <SettingsTabButton label="Leads" isActive={activeSettingsTab === 'lead'} onClick={() => setActiveSettingsTab('lead')} />
-                    <SettingsTabButton label="Projects" isActive={activeSettingsTab === 'project'} onClick={() => setActiveSettingsTab('project')} />
                     <SettingsTabButton label="Finances" isActive={activeSettingsTab === 'booking'} onClick={() => setActiveSettingsTab('booking')} />
-                    <SettingsTabButton label="Users" isActive={activeSettingsTab === 'user'} onClick={() => setActiveSettingsTab('user')} />
                     <SettingsTabButton label="Form Engine" isActive={activeSettingsTab === 'forms'} onClick={() => setActiveSettingsTab('forms')} />
                     <SettingsTabButton label="Company" isActive={activeSettingsTab === 'company'} onClick={() => setActiveSettingsTab('company')} />
                 </nav>
@@ -267,27 +271,12 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                         <SettingCard settingKey="living-places" icon="fas fa-home" title="Living Status" description="Current residence types." onClick={setActiveSetting} />
                     </div>
                 )}
-                {activeSettingsTab === 'project' && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                        <SettingCard settingKey="project-types" icon="fas fa-th-large" title="Project Types" description="Categorization logic." onClick={setActiveSetting} />
-                        <SettingCard settingKey="project-statuses" icon="fas fa-tasks" title="Construction States" description="Project development states." onClick={setActiveSetting} />
-                        <SettingCard settingKey="unit-types" icon="fas fa-door-open" title="Unit Configurations" description="Inventory nomenclature." onClick={setActiveSetting} />
-                        <SettingCard settingKey="inventory-statuses" icon="fas fa-boxes" title="Inventory States" description="Availability tracking codes." onClick={setActiveSetting} />
-                    </div>
-                )}
                 {activeSettingsTab === 'booking' && (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                          <SettingCard settingKey="booking-statuses" icon="fas fa-file-signature" title="Booking Status" description="Post-sales workflow states." onClick={setActiveSetting} />
                          <SettingCard settingKey="agreement-statuses" icon="fas fa-file-contract" title="Legal States" description="Sale deed processing states." onClick={setActiveSetting} />
                          <SettingCard settingKey="possession-statuses" icon="fas fa-key" title="Handover Logic" description="Final possession states." onClick={setActiveSetting} />
-                         <SettingCard settingKey="payment-plans" icon="fas fa-percent" title="Payment Plans" description="CLP and Flexi plan master." onClick={setActiveSetting} />
                          <SettingCard settingKey="financial-settings" icon="fas fa-calculator" title="Financial Engine" description="Tax and rule-based charges." onClick={setActiveSetting} />
-                    </div>
-                )}
-                {activeSettingsTab === 'user' && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                        <SettingCard settingKey="user-roles" icon="fas fa-users-cog" title="IAM Roles" description="Menu and data access control." onClick={setActiveSetting} />
-                        <SettingCard settingKey="user-designations" icon="fas fa-id-badge" title="Designations" description="HR nomenclature." onClick={setActiveSetting} />
                     </div>
                 )}
                 {activeSettingsTab === 'forms' && (
@@ -325,7 +314,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                       <button onClick={() => setActiveSetting(null)} className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] px-2"><i className="fas fa-arrow-left"></i></button>
                     )}
                     <h3 className="text-sm font-bold text-[var(--text-primary)] uppercase tracking-wider">
-                        Admin Console / {activeSection} {activeSetting ? ` / ${activeSetting.replace(/-/g, ' ')}` : ''}
+                        Admin Console / {SECTION_TITLES[activeSection] || activeSection}{activeSetting ? ` / ${activeSetting.replace(/-/g, ' ')}` : ''}
                     </h3>
                 </div>
             </div>
@@ -338,6 +327,8 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
           {renderContent()}
         </div>
       </div>
+      <Toaster />
+      <ConfirmHost />
     </div>
   );
 };

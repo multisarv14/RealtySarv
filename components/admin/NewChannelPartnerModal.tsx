@@ -1,146 +1,61 @@
-
 import React from 'react';
-import { NewChannelPartnerData } from '../../types';
+import { ChannelPartner, NewChannelPartnerData } from '../../types';
+import { Modal, Field, Section, inputCls } from '../ui/Modal';
 
 interface NewChannelPartnerModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAdd: (data: NewChannelPartnerData) => void;
+  /** When set, the dialog edits this partner and calls onSave instead of onAdd. */
+  initial?: ChannelPartner | null;
+  onSave?: (data: NewChannelPartnerData) => void;
+  /** Used to refuse a RERA number that is already registered. */
+  existing?: ChannelPartner[];
 }
 
-const NewChannelPartnerModal: React.FC<NewChannelPartnerModalProps> = ({ isOpen, onClose, onAdd }) => {
-  const [formData, setFormData] = React.useState<NewChannelPartnerData>({
-    firmName: '',
-    contactPerson: '',
-    email: '',
-    phone: '',
-    reraNumber: '',
-    commissionRate: 2.0
-  });
+const EMPTY: NewChannelPartnerData = { firmName: '', contactPerson: '', email: '', phone: '', reraNumber: '', commissionRate: 2.0 };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: name === 'commissionRate' ? parseFloat(value) || 0 : value
-    }));
+const NewChannelPartnerModal: React.FC<NewChannelPartnerModalProps> = ({ isOpen, onClose, onAdd, initial, onSave, existing = [] }) => {
+  const [formData, setFormData] = React.useState<NewChannelPartnerData>(EMPTY);
+  const [submitted, setSubmitted] = React.useState(false);
+
+  React.useEffect(() => { if (isOpen) { setFormData(initial ? { firmName: initial.firmName, contactPerson: initial.contactPerson, email: initial.email, phone: initial.phone, reraNumber: initial.reraNumber, commissionRate: initial.commissionRate } : EMPTY); setSubmitted(false); } }, [isOpen]);
+
+  const set = (name: keyof NewChannelPartnerData) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    setFormData(prev => ({ ...prev, [name]: name === 'commissionRate' ? parseFloat(e.target.value) || 0 : e.target.value }));
+
+  const errors = {
+    firmName: formData.firmName.trim() ? '' : 'Enter the firm name.',
+    contactPerson: formData.contactPerson.trim() ? '' : 'Enter the contact person.',
+    email: /^\S+@\S+\.\S+$/.test(formData.email.trim()) ? '' : 'Enter a valid email.',
+    phone: formData.phone.replace(/\D/g, '').length >= 10 ? '' : 'Enter a 10-digit phone number.',
+    reraNumber: !formData.reraNumber.trim() ? 'Enter the broker RERA number.'
+      : existing.some(c => c.id !== initial?.id && c.reraNumber.trim().toLowerCase() === formData.reraNumber.trim().toLowerCase()) ? 'This RERA number is already registered.' : '',
   };
+  const err = (k: keyof typeof errors) => (submitted && errors[k]) || null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.firmName || !formData.email || !formData.phone || !formData.reraNumber) {
-        alert("Please fill in all mandatory fields including RERA Number.");
-        return;
-    }
-    onAdd(formData);
+    setSubmitted(true);
+    if (Object.values(errors).some(Boolean)) return;
+    const data = { ...formData, firmName: formData.firmName.trim(), contactPerson: formData.contactPerson.trim(), email: formData.email.trim(), reraNumber: formData.reraNumber.trim() };
+    if (initial && onSave) onSave(data); else onAdd(data);
     onClose();
-    // Reset form
-    setFormData({
-        firmName: '',
-        contactPerson: '',
-        email: '',
-        phone: '',
-        reraNumber: '',
-        commissionRate: 2.0
-    });
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50 p-4 animate-fadeIn" onClick={onClose}>
-        <div className="bg-[var(--medium-bg)] p-6 rounded-lg shadow-xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-6">
-                <h3 className="text-xl font-bold text-[var(--text-primary)]">Register Channel Partner</h3>
-                <button onClick={onClose} className="text-[var(--text-secondary)] hover:text-[var(--text-primary)]"><i className="fas fa-times"></i></button>
-            </div>
-            
-            <form onSubmit={handleSubmit} className="space-y-4">
-                <div>
-                    <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Firm / Agency Name *</label>
-                    <input 
-                        type="text" 
-                        name="firmName" 
-                        value={formData.firmName} 
-                        onChange={handleChange} 
-                        required 
-                        placeholder="e.g., Star Realty Ltd"
-                        className="w-full p-2 rounded bg-[var(--dark-bg)] text-[var(--text-primary)] border border-[var(--light-bg)] focus:border-[var(--primary-color)] outline-none" 
-                    />
-                </div>
-                <div>
-                    <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Contact Person Name *</label>
-                    <input 
-                        type="text" 
-                        name="contactPerson" 
-                        value={formData.contactPerson} 
-                        onChange={handleChange} 
-                        required 
-                        placeholder="Primary spokesperson"
-                        className="w-full p-2 rounded bg-[var(--dark-bg)] text-[var(--text-primary)] border border-[var(--light-bg)] focus:border-[var(--primary-color)] outline-none" 
-                    />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                    <div>
-                        <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Email ID *</label>
-                        <input 
-                            type="email" 
-                            name="email" 
-                            value={formData.email} 
-                            onChange={handleChange} 
-                            required 
-                            className="w-full p-2 rounded bg-[var(--dark-bg)] text-[var(--text-primary)] border border-[var(--light-bg)] focus:border-[var(--primary-color)] outline-none" 
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Phone Number *</label>
-                        <input 
-                            type="tel" 
-                            name="phone" 
-                            value={formData.phone} 
-                            onChange={handleChange} 
-                            required 
-                            className="w-full p-2 rounded bg-[var(--dark-bg)] text-[var(--text-primary)] border border-[var(--light-bg)] focus:border-[var(--primary-color)] outline-none" 
-                        />
-                    </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                    <div>
-                        <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Broker RERA No. *</label>
-                        <input 
-                            type="text" 
-                            name="reraNumber" 
-                            value={formData.reraNumber} 
-                            onChange={handleChange} 
-                            required 
-                            placeholder="A518000..."
-                            className="w-full p-2 rounded bg-[var(--dark-bg)] text-[var(--text-primary)] border border-[var(--light-bg)] focus:border-[var(--primary-color)] outline-none" 
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Commission Rate (%)</label>
-                        <input 
-                            type="number" 
-                            step="0.1" 
-                            name="commissionRate" 
-                            value={formData.commissionRate} 
-                            onChange={handleChange} 
-                            className="w-full p-2 rounded bg-[var(--dark-bg)] text-[var(--text-primary)] border border-[var(--light-bg)] focus:border-[var(--primary-color)] outline-none" 
-                        />
-                    </div>
-                </div>
-                
-                <div className="bg-blue-500/10 p-3 rounded-md border border-blue-500/20 text-[10px] text-blue-400">
-                    <p><i className="fas fa-info-circle mr-1"></i> Partners will remain in 'Pending' status until RERA details are verified by your compliance team.</p>
-                </div>
-
-                <div className="flex justify-end gap-3 pt-4 border-t border-[var(--light-bg)]">
-                    <button type="button" onClick={onClose} className="px-4 py-2 rounded text-[var(--text-secondary)] hover:bg-[var(--light-bg)] font-medium transition-colors">Cancel</button>
-                    <button type="submit" className="px-6 py-2 rounded bg-[var(--primary-color)] text-white font-bold hover:bg-[#128c7e] shadow-lg transition-all">Submit Registration</button>
-                </div>
-            </form>
-        </div>
-    </div>
+    <Modal isOpen={isOpen} onClose={onClose} size="lg" title={initial ? 'Edit channel partner' : 'Register channel partner'} onSubmit={handleSubmit} submitLabel={initial ? 'Save changes' : 'Register'}>
+      <Section title="Firm">
+        <Field label="Firm / agency name" htmlFor="cpFirm" required error={err('firmName')}><input id="cpFirm" value={formData.firmName} onChange={set('firmName')} className={inputCls(!!err('firmName'))} /></Field>
+        <Field label="Contact person" htmlFor="cpContact" required error={err('contactPerson')}><input id="cpContact" value={formData.contactPerson} onChange={set('contactPerson')} className={inputCls(!!err('contactPerson'))} /></Field>
+        <Field label="Email" htmlFor="cpEmail" required error={err('email')}><input id="cpEmail" type="email" value={formData.email} onChange={set('email')} className={inputCls(!!err('email'))} /></Field>
+        <Field label="Phone" htmlFor="cpPhone" required error={err('phone')}><input id="cpPhone" type="tel" value={formData.phone} onChange={set('phone')} className={inputCls(!!err('phone'))} /></Field>
+      </Section>
+      <Section title="Compliance and commission">
+        <Field label="Broker RERA no." htmlFor="cpRera" required error={err('reraNumber')}><input id="cpRera" value={formData.reraNumber} onChange={set('reraNumber')} className={inputCls(!!err('reraNumber'))} /></Field>
+        <Field label="Commission rate (%)" htmlFor="cpRate"><input id="cpRate" type="number" step="0.1" min="0" value={formData.commissionRate} onChange={set('commissionRate')} className={inputCls()} /></Field>
+      </Section>
+    </Modal>
   );
 };
 

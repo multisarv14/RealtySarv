@@ -1,5 +1,6 @@
 
 import React from 'react';
+import { toast } from '../ui/Toast';
 
 interface IntegrationItem {
     id: string;
@@ -12,24 +13,10 @@ interface IntegrationItem {
 }
 
 const LEAD_SOURCES: IntegrationItem[] = [
-    { id: 'fb-ads', label: 'Facebook Lead Ads', icon: 'fab fa-facebook-f', color: 'text-blue-600', description: 'Sync leads from FB forms.', status: 'Connected', navTarget: 'meta' },
-    { id: 'insta-ads', label: 'Instagram Lead Ads', icon: 'fab fa-instagram', color: 'text-pink-600', description: 'Sync leads from IG forms.', status: 'Connected', navTarget: 'meta' },
-    { id: 'google-ads', label: 'Google Ads Forms', icon: 'fab fa-google', color: 'text-red-500', description: 'Capture leads from search ads.', status: 'Not Connected', navTarget: 'google' },
-    { id: 'gmb', label: 'Google Business Profile', icon: 'fas fa-store', color: 'text-blue-500', description: 'Leads from maps & search.', status: 'Not Connected' },
-    { id: 'website', label: 'Website Enquiry Forms', icon: 'fas fa-globe', color: 'text-green-500', description: 'API/Webhook integration.', status: 'Connected', navTarget: 'custom' },
-    { id: 'landing-page', label: 'Landing Page Forms', icon: 'fas fa-laptop-code', color: 'text-purple-500', description: 'Capture from campaigns.', status: 'Not Connected' },
-    { id: 'chatbot', label: 'Chatbot Lead Capture', icon: 'fas fa-robot', color: 'text-indigo-500', description: 'Automated chat leads.', status: 'Coming Soon' },
-    { id: 'qr-code', label: 'QR Code Capture', icon: 'fas fa-qrcode', color: 'text-gray-700', description: 'Physical marketing leads.', status: 'Not Connected' },
-    { id: 'whatsapp-chat', label: 'WhatsApp Click-to-Chat', icon: 'fab fa-whatsapp', color: 'text-green-500', description: 'Direct chat entry.', status: 'Connected', navTarget: 'whatsapp' },
-    { id: 'email-parse', label: 'Email Parsing', icon: 'fas fa-envelope-open-text', color: 'text-yellow-600', description: 'Extract leads from emails.', status: 'Not Connected', navTarget: 'email' },
-    { id: 'broker-app', label: 'Broker/Partner Apps', icon: 'fas fa-handshake', color: 'text-orange-500', description: 'External partner feeds.', status: 'Coming Soon' },
-    { id: 'cp-portal', label: 'Channel Partner Portal', icon: 'fas fa-network-wired', color: 'text-cyan-500', description: 'Partner submissions.', status: 'Coming Soon' },
-];
-
-const LEAD_DISTRIBUTION: IntegrationItem[] = [
-    { id: 'round-robin', label: 'Round Robin API', icon: 'fas fa-circle-notch', color: 'text-blue-400', description: 'Distribute leads evenly.', status: 'Connected', navTarget: 'custom' },
-    { id: 'auto-alloc', label: 'Auto Allocation Engine', icon: 'fas fa-cogs', color: 'text-gray-500', description: 'Rule-based assignment.', status: 'Not Connected' },
-    { id: 'call-center', label: 'Call Center Push', icon: 'fas fa-headset', color: 'text-red-400', description: 'Send to dialer systems.', status: 'Coming Soon' },
+    { id: 'fb-ads', label: 'Facebook & Instagram Lead Ads', icon: 'fab fa-facebook-f', color: 'text-blue-600', description: 'Leads from FB and IG forms.', status: 'Coming Soon' },
+    { id: 'google-ads', label: 'Google Ads Forms', icon: 'fab fa-google', color: 'text-red-500', description: 'Capture leads from search ads.', status: 'Coming Soon' },
+    { id: 'website', label: 'Website & Landing Pages', icon: 'fas fa-globe', color: 'text-green-500', description: 'Enquiry forms via API or webhook.', status: 'Coming Soon', navTarget: 'custom' },
+    { id: 'whatsapp-chat', label: 'WhatsApp Click-to-Chat', icon: 'fab fa-whatsapp', color: 'text-green-500', description: 'Direct chat entry.', status: 'Coming Soon', navTarget: 'whatsapp' },
 ];
 
 interface AdminLeadIntegrationsProps {
@@ -61,7 +48,7 @@ const IntegrationCard: React.FC<{ item: IntegrationItem; onNavigate: (target: st
                 : 'bg-[var(--medium-bg)] text-[var(--text-primary)] hover:bg-[var(--primary-color)] hover:text-white border border-[var(--light-bg)] group-hover:border-[var(--primary-color)]'
             }`}
             disabled={item.status === 'Coming Soon'}
-            onClick={() => item.navTarget ? onNavigate(item.navTarget) : alert(`Configuration for ${item.label} coming soon!`)}
+            onClick={() => item.navTarget ? onNavigate(item.navTarget) : toast.info(`${item.label} is coming soon.`)}
         >
             {item.status === 'Connected' ? 'Manage' : 'Connect'}
         </button>
@@ -72,8 +59,8 @@ const AdminLeadIntegrations: React.FC<AdminLeadIntegrationsProps> = ({ onNavigat
     return (
         <div className="p-4 bg-[var(--medium-bg)] rounded-lg shadow-md h-full overflow-hidden flex flex-col">
             <div className="flex-shrink-0 mb-6">
-                <h3 className="text-xl font-bold text-[var(--text-primary)]">Lead Acquisition & Management</h3>
-                <p className="text-sm text-[var(--text-secondary)] mt-1">Manage incoming lead sources and automated distribution rules.</p>
+                <h3 className="text-xl font-bold text-[var(--text-primary)]">Lead capture</h3>
+                <p className="text-sm text-[var(--text-secondary)] mt-1">Bring enquiries from ads and your website straight into LeadSarv. Assigning them to the team is set under Operations, Distribution rules.</p>
             </div>
 
             <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
@@ -86,14 +73,6 @@ const AdminLeadIntegrations: React.FC<AdminLeadIntegrationsProps> = ({ onNavigat
                     </div>
                 </div>
 
-                <div>
-                    <h4 className="text-lg font-bold text-[var(--text-primary)] mb-4 flex items-center gap-2 border-b border-[var(--light-bg)] pb-2">
-                        <i className="fas fa-share-alt text-[var(--primary-color)]"></i> Lead Distribution Integrations
-                    </h4>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                        {LEAD_DISTRIBUTION.map(item => <IntegrationCard key={item.id} item={item} onNavigate={onNavigate} />)}
-                    </div>
-                </div>
             </div>
         </div>
     );

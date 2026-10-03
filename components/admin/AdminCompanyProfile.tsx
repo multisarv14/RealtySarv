@@ -2,6 +2,7 @@
 import React from 'react';
 import { CompanyProfile, FormFieldConfig } from '../../types';
 import DynamicFieldRenderer from '../DynamicFieldRenderer';
+import { toast } from '../ui/Toast';
 
 interface AdminCompanyProfileProps {
   profile: CompanyProfile;
@@ -36,7 +37,7 @@ const AdminCompanyProfile: React.FC<AdminCompanyProfileProps> = ({ profile, onUp
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onUpdateProfile({ ...formData, customData });
-    alert('Company profile updated successfully!');
+    toast.success('Company profile saved.');
   };
 
   return (

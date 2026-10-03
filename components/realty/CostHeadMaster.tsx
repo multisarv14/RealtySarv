@@ -4,6 +4,7 @@ import { db } from '../../db';
 import { useLiveQuery } from '../../liveQuery';
 import { v4 as uuidv4 } from 'uuid';
 import { CostHeadMasterItem, CostHeadCategory } from '../../types';
+import { SHOW_DELETE } from '../../features';
 
 const CostHeadMaster: React.FC = () => {
     const costHeads = useLiveQuery(() => db.costHeadMaster.toArray(), []);
@@ -137,7 +138,7 @@ const CostHeadMaster: React.FC = () => {
                                     <td className="px-4 py-4 text-right">
                                         <div className="flex justify-end gap-1">
                                             <button onClick={() => toggleActive(head.id, head.isActive)} className="p-2 text-gray-500 hover:text-[#1a73e8] transition-colors"><i className="fas fa-power-off text-xs"></i></button>
-                                            <button onClick={() => handleDelete(head.id, head.name)} className="p-2 text-gray-400 hover:text-red-500 transition-colors"><i className="fas fa-trash-alt text-xs"></i></button>
+                                            {SHOW_DELETE && <button onClick={() => handleDelete(head.id, head.name)} className="p-2 text-gray-400 hover:text-red-500 transition-colors"><i className="fas fa-trash-alt text-xs"></i></button>}
                                         </div>
                                     </td>
                                 </tr>

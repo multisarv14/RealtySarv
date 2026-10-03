@@ -4,6 +4,7 @@ import { NewProjectData, ProjectStatus, ProjectType, FormFieldConfig } from '../
 import DynamicFieldRenderer from '../DynamicFieldRenderer';
 import { useLiveQuery } from '../../liveQuery';
 import { db } from '../../db';
+import { Modal, Field, Section, inputCls, textareaCls } from '../ui/Modal';
 
 interface NewProjectModalProps {
   isOpen: boolean;
@@ -22,6 +23,13 @@ const NewProjectModal: React.FC<NewProjectModalProps> = ({ isOpen, onClose, onAd
   const [totalFloors, setTotalFloors] = React.useState('');
   const [wings, setWings] = React.useState('');
   const [customData, setCustomData] = React.useState<Record<string, any>>({});
+  const [submitted, setSubmitted] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!isOpen) return;
+    setName(''); setCompanyName(''); setLocation(''); setReraNumber(''); setProjectType('Residential');
+    setProjectStatus('Pre-launch'); setDescription(''); setTotalFloors(''); setWings(''); setCustomData({}); setSubmitted(false);
+  }, [isOpen]);
 
   const configs = useLiveQuery(() => db.formFieldConfigs.where({ module: 'project' }).toArray(), []);
   const activeConfigs = React.useMemo(() => configs?.filter(c => c.isVisible) || [], [configs]);
@@ -30,137 +38,74 @@ const NewProjectModal: React.FC<NewProjectModalProps> = ({ isOpen, onClose, onAd
   const isVisible = (field: string) => activeConfigs.some(c => c.fieldName === field);
   const isRequired = (field: string) => activeConfigs.find(c => c.fieldName === field)?.isRequired || false;
 
+  const floors = parseInt(totalFloors, 10);
+  const req = (field: string, value: string, msg: string) => (isVisible(field) && !value.trim() ? msg : '');
+  const errors = {
+    name: req('name', name, 'Enter the project name.'),
+    companyName: req('companyName', companyName, 'Enter the company name.'),
+    reraNumber: req('reraNumber', reraNumber, 'Enter the RERA number.'),
+    location: req('location', location, 'Enter the location.'),
+    totalFloors: isVisible('totalFloors') && !(floors > 0) ? 'Enter the number of floors.' : '',
+    description: req('description', description, 'Add a short description.'),
+  };
+  const customErrors = (c: FormFieldConfig) => (c.isRequired && !customData[c.fieldName] ? `${c.label} is required.` : '');
+  const err = (k: keyof typeof errors) => (submitted && errors[k]) || null;
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
-    const floors = parseInt(totalFloors, 10);
-    const wingsArray = wings.split(',').map(w => w.trim()).filter(Boolean);
-
-    // Validate custom fields
-    for (const c of customConfigs) {
-        if (c.isRequired && !customData[c.fieldName]) {
-            alert(`${c.label} is required.`);
-            return;
-        }
-    }
-
-    if (name.trim() && companyName.trim() && location.trim() && reraNumber.trim() && description.trim() && !isNaN(floors) && floors > 0) {
-      onAddProject({ 
-        name, 
-        companyName,
-        location, 
-        reraNumber,
-        projectType,
-        projectStatus,
-        description,
-        totalFloors: floors, 
-        wings: wingsArray,
-        customData
-      });
-      onClose();
-    } else {
-      alert('Please fill all required system fields.');
-    }
+    setSubmitted(true);
+    if (Object.values(errors).some(Boolean) || customConfigs.some(customErrors)) return;
+    onAddProject({
+      name: name.trim(),
+      companyName: companyName.trim(),
+      location: location.trim(),
+      reraNumber: reraNumber.trim(),
+      projectType,
+      projectStatus,
+      description: description.trim(),
+      totalFloors: floors || 0,
+      wings: wings.split(',').map(w => w.trim()).filter(Boolean),
+      customData,
+    });
+    onClose();
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50 animate-fadeIn" onClick={onClose} role="dialog" aria-modal="true">
-      <div className="bg-[var(--medium-bg)] p-6 sm:p-8 rounded-lg shadow-xl w-11/12 max-w-2xl relative max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-        <h3 className="text-xl sm:text-2xl font-bold mb-6 text-[var(--text-primary)] text-center">Register New Project</h3>
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {isVisible('name') && (
-                <div>
-                <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Project Name*</label>
-                <input type="text" value={name} onChange={e => setName(e.target.value)} required placeholder="Enter project name" className="w-full p-3 rounded-md border border-[var(--light-bg)] bg-[var(--dark-bg)] text-[var(--text-primary)]" />
-                </div>
-            )}
-            {isVisible('companyName') && (
-                <div>
-                <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Company Name*</label>
-                <input type="text" value={companyName} onChange={e => setCompanyName(e.target.value)} required placeholder="Enter company name" className="w-full p-3 rounded-md border border-[var(--light-bg)] bg-[var(--dark-bg)] text-[var(--text-primary)]" />
-                </div>
-            )}
-          </div>
-          {isVisible('reraNumber') && (
-            <div>
-                <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">RERA Number*</label>
-                <input type="text" value={reraNumber} onChange={e => setReraNumber(e.target.value)} required placeholder="e.g., A51800000000" className="w-full p-3 rounded-md border border-[var(--light-bg)] bg-[var(--dark-bg)] text-[var(--text-primary)]" />
+    <Modal isOpen={isOpen} onClose={onClose} size="2xl" title="Register new project" onSubmit={handleSubmit} submitLabel="Add project">
+      <Section title="Project">
+        {isVisible('name') && <Field label="Project name" htmlFor="npName" required error={err('name')}><input id="npName" value={name} onChange={e => setName(e.target.value)} className={inputCls(!!err('name'))} /></Field>}
+        {isVisible('companyName') && <Field label="Company name" htmlFor="npCompany" required error={err('companyName')}><input id="npCompany" value={companyName} onChange={e => setCompanyName(e.target.value)} className={inputCls(!!err('companyName'))} /></Field>}
+        {isVisible('reraNumber') && <Field label="RERA number" htmlFor="npRera" required error={err('reraNumber')}><input id="npRera" value={reraNumber} onChange={e => setReraNumber(e.target.value)} placeholder="e.g. A51800000000" className={inputCls(!!err('reraNumber'))} /></Field>}
+        {isVisible('location') && <Field label="Location" htmlFor="npLocation" required error={err('location')}><input id="npLocation" value={location} onChange={e => setLocation(e.target.value)} className={inputCls(!!err('location'))} /></Field>}
+        {isVisible('projectType') && (
+          <Field label="Type" htmlFor="npType">
+            <select id="npType" value={projectType} onChange={e => setProjectType(e.target.value as ProjectType)} className={inputCls()}>
+              <option>Residential</option><option>Commercial</option><option>Mixed-Use</option>
+            </select>
+          </Field>
+        )}
+        {isVisible('projectStatus') && (
+          <Field label="Status" htmlFor="npStatus">
+            <select id="npStatus" value={projectStatus} onChange={e => setProjectStatus(e.target.value as ProjectStatus)} className={inputCls()}>
+              <option>Pre-launch</option><option>Under Construction</option><option>Ready to Move</option>
+            </select>
+          </Field>
+        )}
+        {isVisible('totalFloors') && <Field label="Total floors" htmlFor="npFloors" required error={err('totalFloors')}><input id="npFloors" type="number" min="1" value={totalFloors} onChange={e => setTotalFloors(e.target.value)} className={inputCls(!!err('totalFloors'))} /></Field>}
+        {isVisible('wings') && <Field label="Wings" htmlFor="npWings" hint="Comma separated, e.g. A, B, C"><input id="npWings" value={wings} onChange={e => setWings(e.target.value)} className={inputCls()} /></Field>}
+        {isVisible('description') && <Field label="Description" htmlFor="npDesc" required error={err('description')} className="sm:col-span-2"><textarea id="npDesc" value={description} onChange={e => setDescription(e.target.value)} rows={3} className={textareaCls(!!err('description'))} /></Field>}
+      </Section>
+      {customConfigs.length > 0 && (
+        <Section title="Additional information">
+          {customConfigs.map(config => (
+            <div key={config.id}>
+              <DynamicFieldRenderer config={config} value={customData[config.fieldName]} onChange={(val) => setCustomData(prev => ({ ...prev, [config.fieldName]: val }))} />
+              {submitted && customErrors(config) && <p role="alert" className="mt-1 text-xs text-red-500">{customErrors(config)}</p>}
             </div>
-          )}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {isVisible('projectType') && (
-                <div>
-                    <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Project Type*</label>
-                    <select value={projectType} onChange={e => setProjectType(e.target.value as ProjectType)} className="w-full p-3 rounded-md border border-[var(--light-bg)] bg-[var(--dark-bg)] text-[var(--text-primary)]">
-                        <option value="Residential">Residential</option>
-                        <option value="Commercial">Commercial</option>
-                        <option value="Mixed-Use">Mixed-Use</option>
-                    </select>
-                </div>
-            )}
-            {isVisible('projectStatus') && (
-                <div>
-                    <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Project Status*</label>
-                    <select value={projectStatus} onChange={e => setProjectStatus(e.target.value as ProjectStatus)} className="w-full p-3 rounded-md border border-[var(--light-bg)] bg-[var(--dark-bg)] text-[var(--text-primary)]">
-                        <option value="Pre-launch">Pre-launch</option>
-                        <option value="Under Construction">Under Construction</option>
-                        <option value="Ready to Move">Ready to Move</option>
-                    </select>
-                </div>
-            )}
-            {isVisible('location') && (
-                <div>
-                    <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Location*</label>
-                    <input type="text" value={location} onChange={e => setLocation(e.target.value)} required className="w-full p-3 rounded-md border border-[var(--light-bg)] bg-[var(--dark-bg)] text-[var(--text-primary)]" />
-                </div>
-            )}
-            {isVisible('totalFloors') && (
-                <div>
-                    <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Total Floors*</label>
-                    <input type="number" value={totalFloors} onChange={e => setTotalFloors(e.target.value)} required min="1" className="w-full p-3 rounded-md border border-[var(--light-bg)] bg-[var(--dark-bg)] text-[var(--text-primary)]" />
-                </div>
-            )}
-          </div>
-          {isVisible('wings') && (
-            <div>
-                <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Wings (comma separated)</label>
-                <input type="text" value={wings} onChange={e => setWings(e.target.value)} placeholder="e.g. A, B, C" className="w-full p-3 rounded-md border border-[var(--light-bg)] bg-[var(--dark-bg)] text-[var(--text-primary)]" />
-            </div>
-          )}
-          {isVisible('description') && (
-            <div>
-              <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Description*</label>
-              <textarea value={description} onChange={e => setDescription(e.target.value)} required rows={3} className="w-full p-3 rounded-md border border-[var(--light-bg)] bg-[var(--dark-bg)] text-[var(--text-primary)]" />
-            </div>
-          )}
-
-          {/* Dynamic Custom Fields */}
-          {customConfigs.length > 0 && (
-              <div className="pt-4 border-t border-[var(--light-bg)]">
-                  <h4 className="text-xs font-bold text-[var(--primary-color)] uppercase tracking-wider mb-4">Additional Information</h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {customConfigs.map(config => (
-                          <DynamicFieldRenderer 
-                            key={config.id} 
-                            config={config} 
-                            value={customData[config.fieldName]} 
-                            onChange={(val) => setCustomData(prev => ({...prev, [config.fieldName]: val}))} 
-                          />
-                      ))}
-                  </div>
-              </div>
-          )}
-
-          <div className="flex justify-end gap-3 mt-4 pt-4 border-t border-[var(--light-bg)]">
-            <button type="button" onClick={onClose} className="px-5 py-2 rounded-md bg-gray-700 text-[var(--text-primary)] font-medium">Cancel</button>
-            <button type="submit" className="px-5 py-2 rounded-md bg-[var(--primary-color)] text-white font-medium hover:bg-[#128c7e]">Add Project</button>
-          </div>
-        </form>
-      </div>
-    </div>
+          ))}
+        </Section>
+      )}
+    </Modal>
   );
 };
 

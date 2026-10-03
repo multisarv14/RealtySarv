@@ -14,7 +14,7 @@ const data: Record<string, any[]> = {
   possessionStatusTypes: C.INITIAL_POSSESSION_STATUS_TYPES, inventoryStatusTypes: C.INITIAL_INVENTORY_STATUS_TYPES,
   projectTypeTypes: C.INITIAL_PROJECT_TYPE_TYPES, projectStatusTypes: C.INITIAL_PROJECT_STATUS_TYPES,
   userRoleSettings: C.INITIAL_USER_ROLE_SETTINGS, userDesignations: C.INITIAL_USER_DESIGNATIONS,
-  channelPartners: C.INITIAL_CHANNEL_PARTNERS, formFieldConfigs: C.INITIAL_FORM_FIELD_CONFIGS,
+  channelPartners: C.INITIAL_CHANNEL_PARTNERS, distributionRules: C.INITIAL_DISTRIBUTION_RULES, formFieldConfigs: C.INITIAL_FORM_FIELD_CONFIGS,
   companyProfile: [C.INITIAL_COMPANY_PROFILE],
   financialSettings: [{ id: 1, ...C.INITIAL_FINANCIAL_SETTINGS }],
   applicationSettings: [{ id: 1, ...C.INITIAL_APPLICATION_SETTINGS }],
@@ -54,7 +54,7 @@ const data: Record<string, any[]> = {
 // Tables that hold a tenant's own business data. A brand-new tenant starts with these empty
 // (but keeps the configuration/master-data tables above), exactly like the old install wizard.
 export const OPERATIONAL = [
-  'users', 'leads', 'projects', 'channelPartners', 'vendors', 'purchaseRequisitions', 'purchaseOrders', 'workOrders',
+  'users', 'leads', 'projects', 'channelPartners', 'distributionRules', 'vendors', 'purchaseRequisitions', 'purchaseOrders', 'workOrders',
   'materialStock', 'dailyProgressReports', 'projectPhases', 'costBudgets', 'boqs', 'boqItems', 'vouchers', 'gstEntries',
 ];
 

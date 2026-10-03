@@ -1,5 +1,6 @@
 
 import React from 'react';
+import { toast } from '../ui/Toast';
 
 interface ProviderItem {
     id: string;
@@ -12,18 +13,14 @@ interface ProviderItem {
 }
 
 const MARKETING_TOOLS: ProviderItem[] = [
-    { id: 'mailchimp', label: 'Mailchimp', icon: 'fab fa-mailchimp', color: 'text-yellow-500', category: 'Marketing', status: 'Connected', description: 'Email marketing & automation.' },
-    { id: 'sendgrid', label: 'SendGrid', icon: 'fas fa-paper-plane', color: 'text-blue-500', category: 'Marketing', status: 'Not Connected', description: 'Transactional & marketing emails.' },
-    { id: 'activecampaign', label: 'ActiveCampaign', icon: 'fas fa-cogs', color: 'text-indigo-500', category: 'Marketing', status: 'Coming Soon', description: 'Customer experience automation.' },
-    { id: 'hubspot', label: 'HubSpot Marketing', icon: 'fab fa-hubspot', color: 'text-orange-500', category: 'Marketing', status: 'Not Connected', description: 'Inbound marketing platform.' },
-    { id: 'zoho-campaigns', label: 'Zoho Campaigns', icon: 'fas fa-envelope-open-text', color: 'text-red-500', category: 'Marketing', status: 'Coming Soon', description: 'Email marketing software.' },
+    { id: 'mailchimp', label: 'Mailchimp', icon: 'fab fa-mailchimp', color: 'text-yellow-500', category: 'Marketing', status: 'Coming Soon', description: 'Email marketing & automation.' },
+    { id: 'sendgrid', label: 'SendGrid', icon: 'fas fa-paper-plane', color: 'text-blue-500', category: 'Marketing', status: 'Coming Soon', description: 'Transactional & marketing emails.' },
 ];
 
 const ANALYTICS_TOOLS: ProviderItem[] = [
-    { id: 'ga4', label: 'Google Analytics 4', icon: 'fab fa-google', color: 'text-orange-400', category: 'Analytics', status: 'Connected', description: 'Web analytics service.' },
-    { id: 'gtm', label: 'Google Tag Manager', icon: 'fas fa-tags', color: 'text-blue-400', category: 'Analytics', status: 'Not Connected', description: 'Tag management system.' },
-    { id: 'fb-pixel', label: 'Facebook Pixel', icon: 'fab fa-facebook-f', color: 'text-blue-600', category: 'Analytics', status: 'Connected', description: 'Conversion tracking.' },
-    { id: 'linkedin-insights', label: 'LinkedIn Insights', icon: 'fab fa-linkedin-in', color: 'text-blue-700', category: 'Analytics', status: 'Not Connected', description: 'Demographic analytics.' },
+    { id: 'ga4', label: 'Google Analytics 4', icon: 'fab fa-google', color: 'text-orange-400', category: 'Analytics', status: 'Coming Soon', description: 'Web analytics service.' },
+    { id: 'gtm', label: 'Google Tag Manager', icon: 'fas fa-tags', color: 'text-blue-400', category: 'Analytics', status: 'Coming Soon', description: 'Tag management system.' },
+    { id: 'fb-pixel', label: 'Facebook Pixel', icon: 'fab fa-facebook-f', color: 'text-blue-600', category: 'Analytics', status: 'Coming Soon', description: 'Conversion tracking.' },
 ];
 
 const ProviderCard: React.FC<{ item: ProviderItem }> = ({ item }) => (
@@ -51,7 +48,7 @@ const ProviderCard: React.FC<{ item: ProviderItem }> = ({ item }) => (
                 : 'bg-[var(--medium-bg)] text-[var(--text-primary)] hover:bg-[var(--primary-color)] hover:text-white border border-[var(--light-bg)] group-hover:border-[var(--primary-color)]'
             }`}
             disabled={item.status === 'Coming Soon'}
-            onClick={() => alert(`Configuring ${item.label}...`)}
+            onClick={() => toast.info(`${item.label} is coming soon.`)}
         >
             {item.status === 'Connected' ? 'Configure' : 'Connect'}
         </button>

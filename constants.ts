@@ -1,6 +1,6 @@
 
 import { buildDemoLeads } from './demoLeads';
-import { Lead, Message, IntegrationOptionType, LeadStatus, SiteVisit, Task, User, Source, AdminPanelSection, Project, Budget, ClientProfile, UnitType, LocationSetting, LivingPlace, Template, LeadStatusType, SiteVisitStatusType, TaskPriorityType, BookingStatusType, AgreementStatusType, PossessionStatusType, InventoryStatusType, ProjectTypeType, ProjectStatusType, UserRoleSetting, UserDesignation, CompanyProfile, PaymentPlan, FinancialSettings, ApplicationSettings, ChannelPartner, FormFieldConfig, AgreementStatus, PossessionStatus } from './types';
+import { Lead, Message, IntegrationOptionType, LeadStatus, SiteVisit, Task, User, Source, AdminPanelSection, Project, Budget, ClientProfile, UnitType, LocationSetting, LivingPlace, Template, LeadStatusType, SiteVisitStatusType, TaskPriorityType, BookingStatusType, AgreementStatusType, PossessionStatusType, InventoryStatusType, ProjectTypeType, ProjectStatusType, UserRoleSetting, UserDesignation, CompanyProfile, PaymentPlan, FinancialSettings, ApplicationSettings, ChannelPartner, DistributionRule, FormFieldConfig, AgreementStatus, PossessionStatus } from './types';
 import { v4 as uuidv4 } from 'uuid';
 
 export const USER_AVATAR_INITIALS: string = 'RP';
@@ -24,42 +24,61 @@ export const INTEGRATION_OPTIONS: IntegrationOptionType[] = [
 
 export const ADMIN_PANEL_SECTIONS: AdminPanelSectionConfig[] = [
   { id: 'dashboard', label: 'Dashboard', icon: 'fas fa-tachometer-alt' },
-  { id: 'leads', label: 'Lead Management', icon: 'fas fa-users' },
-  { id: 'lead-flow', label: 'Lead Flow', icon: 'fas fa-stream' },
-  { id: 'task-management', label: 'Task Management', icon: 'fas fa-tasks' },
-  { id: 'users', label: 'User Management', icon: 'fas fa-user-circle' },
-  { id: 'projects', label: 'Project Management', icon: 'fas fa-building' },
-  { id: 'channel-partners', label: 'Channel Partners', icon: 'fas fa-handshake' },
+  {
+    id: 'users',
+    label: 'Users',
+    icon: 'fas fa-user-circle',
+    subItems: [
+        { id: 'list', label: 'People', icon: 'fas fa-users' },
+        { id: 'access', label: 'Roles & access', icon: 'fas fa-user-shield' },
+        { id: 'designations', label: 'Designations', icon: 'fas fa-id-badge' },
+        { id: 'chart', label: 'Org chart', icon: 'fas fa-sitemap' },
+    ]
+  },
+  {
+    id: 'projects',
+    label: 'Projects',
+    icon: 'fas fa-building',
+    subItems: [
+        { id: 'list', label: 'All projects', icon: 'fas fa-list' },
+        { id: 'types', label: 'Project types', icon: 'fas fa-th-large' },
+        { id: 'statuses', label: 'Construction stages', icon: 'fas fa-hard-hat' },
+        { id: 'unit-types', label: 'Unit types', icon: 'fas fa-door-open' },
+        { id: 'inventory', label: 'Inventory states', icon: 'fas fa-boxes' },
+        { id: 'payment-plans', label: 'Payment plans', icon: 'fas fa-percent' },
+    ]
+  },
+  { id: 'channel-partners', label: 'Partners', icon: 'fas fa-handshake' },
   {
     id: 'integrations',
     label: 'Integrations',
     icon: 'fas fa-puzzle-piece',
     subItems: [
-        { id: 'lead-acquisition', label: 'Lead Acquisition', icon: 'fas fa-magnet' },
-        { id: 'portals', label: 'Property Portals', icon: 'fas fa-home' },
-        { id: 'communication', label: 'Comm. & Telephony', icon: 'fas fa-headset' },
-        { id: 'payment-gateways', label: 'Payment Gateways', icon: 'fas fa-credit-card' },
-        { id: 'accounting', label: 'Accounting & ERP', icon: 'fas fa-calculator' },
-        { id: 'project-management', label: 'Project Management', icon: 'fas fa-tasks' },
-        { id: 'storage', label: 'Document Storage', icon: 'fas fa-hdd' },
-        { id: 'marketing', label: 'Marketing & Auto.', icon: 'fas fa-bullhorn' },
-        { id: 'custom', label: 'Custom Integrations', icon: 'fas fa-code' },
+        { id: 'lead-acquisition', label: 'Lead capture', icon: 'fas fa-magnet' },
+        { id: 'portals', label: 'Portals', icon: 'fas fa-home' },
+        { id: 'communication', label: 'Calls & chat', icon: 'fas fa-headset' },
+        { id: 'payment-gateways', label: 'Payments', icon: 'fas fa-credit-card' },
+        { id: 'accounting', label: 'Accounting', icon: 'fas fa-calculator' },
+        { id: 'storage', label: 'Storage', icon: 'fas fa-hdd' },
+        { id: 'marketing', label: 'Marketing', icon: 'fas fa-bullhorn' },
+        { id: 'custom', label: 'API & webhooks', icon: 'fas fa-code' },
         { id: 'email', label: 'Email', icon: 'fas fa-envelope' },
         { id: 'templates', label: 'Templates', icon: 'fas fa-file-alt' },
-        { id: 'meta', label: 'Meta (Facebook)', icon: 'fab fa-facebook' },
-        { id: 'google', label: 'Google Ads', icon: 'fab fa-google' },
-        { id: 'linkedin', label: 'LinkedIn', icon: 'fab fa-linkedin' },
     ]
   },
-  { id: 'reporting', label: 'Reporting', icon: 'fas fa-chart-bar' },
+  { id: 'reporting', label: 'Reports', icon: 'fas fa-chart-bar' },
+  {
+    id: 'operations',
+    label: 'Operations',
+    icon: 'fas fa-random',
+    subItems: [
+        { id: 'transfer', label: 'Lead transfer', icon: 'fas fa-exchange-alt' },
+        { id: 'merge', label: 'Lead merge', icon: 'fas fa-code-merge' },
+        { id: 'distribution', label: 'Distribution rules', icon: 'fas fa-share-alt' },
+    ]
+  },
   { id: 'settings', label: 'Settings', icon: 'fas fa-cog' },
 ];
-
-export const AVAILABLE_MENUS: string[] = ADMIN_PANEL_SECTIONS.flatMap(section => {
-  const mainLabel = section.label;
-  const subLabels = section.subItems ? section.subItems.map(sub => sub.label) : [];
-  return [mainLabel, ...subLabels];
-});
 
 export const defaultCustomerDocs = {
   'PAN Card': { status: 'Pending' as const },
@@ -71,7 +90,7 @@ export const defaultCustomerDocs = {
 };
 
 export const INITIAL_USERS: User[] = [
-  { id: 'user-1', name: 'John Doe', username: 'ss', password: 'sss', email: 'john.doe@example.com', phone: '+1-555-0111', role: 'Admin', isActive: true, assignedProjectIds: ['proj-1', 'proj-2', 'proj-3'], reportsTo: null },
+  { id: 'user-1', name: 'Sandeep Shah', username: 'ss', password: 'sss', email: 'sandeep@multisarv.com', phone: '+91 98230 11000', role: 'Admin', isActive: true, assignedProjectIds: ['proj-1', 'proj-2', 'proj-3'], reportsTo: null },
   { id: 'user-2', name: 'Aarav Deshmukh', username: 'aarav', password: 'sss', email: 'aarav@multisarv.com', phone: '+91 98230 11001', role: 'Sales', isActive: true, assignedProjectIds: ['proj-1', 'proj-2'], reportsTo: 'user-1' },
   { id: 'user-3', name: 'Priya Nair', username: 'priya', password: 'sss', email: 'priya@multisarv.com', phone: '+91 98230 11002', role: 'Sales', isActive: true, assignedProjectIds: ['proj-1', 'proj-3'], reportsTo: 'user-1' },
   { id: 'user-4', name: 'Rohan Kulkarni', username: 'rohan', password: 'sss', email: 'rohan@multisarv.com', phone: '+91 98230 11003', role: 'Sales', isActive: true, assignedProjectIds: ['proj-2', 'proj-3'], reportsTo: 'user-1' },
@@ -165,12 +184,23 @@ export const INITIAL_POSSESSION_STATUS_TYPES: PossessionStatusType[] = [{ id: 'p
 export const INITIAL_INVENTORY_STATUS_TYPES: InventoryStatusType[] = [{ id: 'ist-1', name: 'Available' }, { id: 'ist-2', name: 'Booked' }];
 export const INITIAL_PROJECT_TYPE_TYPES: ProjectTypeType[] = [{ id: 'pt-1', name: 'Residential' }, { id: 'pt-2', name: 'Commercial' }];
 export const INITIAL_PROJECT_STATUS_TYPES: ProjectStatusType[] = [{ id: 'ps-1', name: 'Pre-launch' }, { id: 'ps-2', name: 'Under Construction' }];
-export const INITIAL_USER_ROLE_SETTINGS: UserRoleSetting[] = [{ id: 'urs-1', name: 'Sales Manager', menuAccess: [] }];
+export const INITIAL_USER_ROLE_SETTINGS: UserRoleSetting[] = [];
 export const INITIAL_USER_DESIGNATIONS: UserDesignation[] = [{ id: 'ud-1', name: 'Senior Sales Executive' }];
-export const INITIAL_COMPANY_PROFILE: CompanyProfile = { name: "MultiSarv Pvt.Ltd", address: "123 Business Avenue", phone: "+1-800-555-LEAD", website: "www.multisarv.com", setupCompleted: false };
+export const INITIAL_COMPANY_PROFILE: CompanyProfile = { name: "MultiSarv Pvt.Ltd", address: "Baner Road, Pune", phone: "+91 98230 11000", website: "www.multisarv.com", setupCompleted: false };
 export const INITIAL_FINANCIAL_SETTINGS: FinancialSettings = { gstPercentage: 5, stampDutyRules: [], registrationRules: [], societyFormationCharges: { basis: 'fixedAmount', value: 25000, applyGst: false }, legalCharges: { basis: 'fixedAmount', value: 25000, applyGst: false }, maintenanceCharges: { basis: 'saleableArea', value: 2, months: 24, applyGst: false }, corpusFund: { basis: 'saleableArea', value: 50, applyGst: false }, customCharges: [] };
 export const INITIAL_APPLICATION_SETTINGS: ApplicationSettings = { dateFormat: 'DD/MM/YYYY', timeZone: 'UTC', currencySymbol: '₹' };
-export const INITIAL_CHANNEL_PARTNERS: ChannelPartner[] = [{ id: 'cp-1', firmName: 'Elite Realty Brokers', contactPerson: 'Rahul Sharma', email: 'rahul@eliterealty.com', phone: '+91 98765 43210', reraNumber: 'A51800012345', status: 'Active', commissionRate: 2.5, totalLeads: 45, totalConversions: 3, onboardingDate: '2023-10-12' }];
+export const INITIAL_CHANNEL_PARTNERS: ChannelPartner[] = [
+  { id: 'cp-1', firmName: 'Elite Realty Brokers', contactPerson: 'Rahul Sharma', email: 'rahul@eliterealty.in', phone: '+91 98765 43210', reraNumber: 'A51800012345', status: 'Active', commissionRate: 2.5, totalLeads: 0, totalConversions: 0, onboardingDate: '2025-10-12' },
+  { id: 'cp-2', firmName: 'Shree Property Consultants', contactPerson: 'Meera Joshi', email: 'meera@shreeproperty.in', phone: '+91 98220 55671', reraNumber: 'A51800023456', status: 'Active', commissionRate: 2, totalLeads: 0, totalConversions: 0, onboardingDate: '2025-12-02' },
+  { id: 'cp-3', firmName: 'Kothrud Homes & Estates', contactPerson: 'Anil Kulkarni', email: 'anil@kothrudhomes.in', phone: '+91 97300 88120', reraNumber: 'A51800034567', status: 'Inactive', commissionRate: 1.5, totalLeads: 0, totalConversions: 0, onboardingDate: '2026-01-18' },
+  { id: 'cp-4', firmName: 'Baner Realty Hub', contactPerson: 'Pooja Deshpande', email: 'pooja@banerrealty.in', phone: '+91 99221 40477', reraNumber: 'A51800045678', status: 'Pending', commissionRate: 2, totalLeads: 0, totalConversions: 0, onboardingDate: '2026-09-28' },
+  { id: 'cp-5', firmName: 'Aundh Property Point', contactPerson: 'Vikram Patil', email: 'vikram@aundhproperty.in', phone: '+91 98900 76231', reraNumber: 'A51800056789', status: 'Active', commissionRate: 2.25, totalLeads: 0, totalConversions: 0, onboardingDate: '2026-03-09' },
+];
+
+export const INITIAL_DISTRIBUTION_RULES: DistributionRule[] = [
+  { id: 'dr-1', name: 'Grand Towers: share between Aarav and Priya', position: 1, enabled: false, mode: 'Round robin', projects: ['The Grand Towers'], sources: [], assignees: ['user-2', 'user-3'] },
+  { id: 'dr-2', name: 'Portal enquiries: whoever has the fewest open leads', position: 2, enabled: false, mode: 'Least loaded', projects: [], sources: ['99acres', 'MagicBricks'], assignees: ['user-2', 'user-3', 'user-4', 'user-5'] },
+];
 
 export const INITIAL_FORM_FIELD_CONFIGS: FormFieldConfig[] = [
   { id: 'l1', module: 'lead', fieldName: 'firstName', label: 'First Name', fieldType: 'text', isVisible: true, isRequired: true, isSystem: true },

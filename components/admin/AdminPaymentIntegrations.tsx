@@ -1,5 +1,6 @@
 
 import React from 'react';
+import { toast } from '../ui/Toast';
 
 interface ProviderItem {
     id: string;
@@ -11,12 +12,10 @@ interface ProviderItem {
 }
 
 const PAYMENT_PROVIDERS: ProviderItem[] = [
-    { id: 'razorpay', label: 'Razorpay', icon: 'fas fa-bolt', color: 'text-blue-500', status: 'Connected', description: 'Accept payments via UPI, Cards, Netbanking.' },
-    { id: 'payu', label: 'PayU', icon: 'fas fa-wallet', color: 'text-green-500', status: 'Not Connected', description: 'Leading payment gateway for India.' },
-    { id: 'ccavenue', label: 'CCAvenue', icon: 'fas fa-money-check-alt', color: 'text-orange-500', status: 'Not Connected', description: 'Multi-currency payment processing.' },
+    { id: 'razorpay', label: 'Razorpay', icon: 'fas fa-bolt', color: 'text-blue-500', status: 'Coming Soon', description: 'Accept payments via UPI, Cards, Netbanking.' },
+    { id: 'payu', label: 'PayU', icon: 'fas fa-wallet', color: 'text-green-500', status: 'Coming Soon', description: 'Leading payment gateway for India.' },
+    { id: 'ccavenue', label: 'CCAvenue', icon: 'fas fa-money-check-alt', color: 'text-orange-500', status: 'Coming Soon', description: 'Multi-currency payment processing.' },
     { id: 'cashfree', label: 'Cashfree', icon: 'fas fa-money-bill-wave', color: 'text-pink-500', status: 'Coming Soon', description: 'Banking and payment solutions.' },
-    { id: 'paytm', label: 'Paytm Business', icon: 'fas fa-mobile-alt', color: 'text-blue-400', status: 'Coming Soon', description: 'Accept payments via Paytm Wallet & UPI.' },
-    { id: 'billdesk', label: 'Billdesk', icon: 'fas fa-file-invoice-dollar', color: 'text-yellow-500', status: 'Coming Soon', description: 'Bill payment and settlement services.' },
 ];
 
 const ProviderCard: React.FC<{ item: ProviderItem }> = ({ item }) => (
@@ -44,7 +43,7 @@ const ProviderCard: React.FC<{ item: ProviderItem }> = ({ item }) => (
                 : 'bg-[var(--medium-bg)] text-[var(--text-primary)] hover:bg-[var(--primary-color)] hover:text-white border border-[var(--light-bg)] group-hover:border-[var(--primary-color)]'
             }`}
             disabled={item.status === 'Coming Soon'}
-            onClick={() => alert(`Configuration for ${item.label} coming soon!`)}
+            onClick={() => toast.info(`${item.label} is coming soon.`)}
         >
             {item.status === 'Connected' ? 'Configure' : 'Connect'}
         </button>

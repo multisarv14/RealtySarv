@@ -7,6 +7,23 @@ interface OrganizationChartProps {
   users: User[];
 }
 
+const CHART_CSS = `
+.org-tree, .org-tree ul { list-style: none; margin: 0; padding: 0; display: flex; justify-content: center; }
+.org-tree ul { padding-top: 22px; position: relative; }
+.org-tree li { position: relative; padding: 22px 8px 0; display: flex; flex-direction: column; align-items: center; }
+.org-tree > li { padding-top: 0; }
+.org-tree li::before, .org-tree li::after { content: ''; position: absolute; top: 0; right: 50%; width: 50%; height: 22px; border-top: 2px solid var(--border-color, #3a4a55); }
+.org-tree li::after { right: auto; left: 50%; border-left: 2px solid var(--border-color, #3a4a55); }
+.org-tree li:only-child::before, .org-tree li:only-child::after { display: none; }
+.org-tree li:only-child { padding-top: 0; }
+.org-tree li:first-child::before, .org-tree li:last-child::after { border-top: 0 none; }
+.org-tree li:last-child::before { border-right: 2px solid var(--border-color, #3a4a55); border-radius: 0 6px 0 0; }
+.org-tree li:first-child::after { border-radius: 6px 0 0 0; }
+.org-tree ul::before { content: ''; position: absolute; top: 0; left: 50%; height: 22px; border-left: 2px solid var(--border-color, #3a4a55); }
+.org-node { display: flex; flex-direction: column; align-items: center; text-align: center; min-width: 9rem; padding: 12px 14px; border-radius: 12px; background: var(--dark-bg); border: 1px solid var(--light-bg); box-shadow: 0 1px 3px rgba(0,0,0,.15); }
+.org-avatar { width: 40px; height: 40px; border-radius: 9999px; margin-bottom: 6px; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: #fff; background: var(--primary-color); }
+`;
+
 const OrganizationChart: React.FC<OrganizationChartProps> = ({ users }) => {
   const safeUsers = React.useMemo(() => users || [], [users]);
 
@@ -36,7 +53,12 @@ const OrganizationChart: React.FC<OrganizationChartProps> = ({ users }) => {
   }
 
   return (
-    <div className="org-chart">
+    <div className="org-chart overflow-x-auto pb-4">
+      <div className="min-w-max flex flex-col items-center">
+      <style>{CHART_CSS}</style>
+      {rootUsers.length === safeUsers.length && safeUsers.length > 1 && (
+        <p className="mb-4 text-sm text-[var(--text-secondary)]"><i className="fas fa-info-circle mr-1.5" aria-hidden="true"></i>Nobody reports to anyone yet. Open a person on the People screen and set “Reports to” to build the chart.</p>
+      )}
       {rootUsers.length > 0 ? (
         <ul className="org-tree">
           {rootUsers.map(user => (
@@ -50,6 +72,7 @@ const OrganizationChart: React.FC<OrganizationChartProps> = ({ users }) => {
       ) : (
         <p className="text-center text-[var(--text-secondary)]">No users in the system to display.</p>
       )}
+      </div>
     </div>
   );
 };

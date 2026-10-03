@@ -2,6 +2,9 @@
 import React from 'react';
 import { Template, NewTemplateData, TemplateType } from '../../types';
 import NewTemplateModal from './NewTemplateModal';
+import { confirmDialog } from '../ui/Confirm';
+import { toast } from '../ui/Toast';
+import { SHOW_DELETE } from '../../features';
 
 interface AdminTemplateManagementProps {
   templates: Template[];
@@ -11,6 +14,7 @@ interface AdminTemplateManagementProps {
 
 const AdminTemplateManagement: React.FC<AdminTemplateManagementProps> = ({ templates, onUpdateTemplates, onAddTemplate }) => {
   const [showNewTemplateModal, setShowNewTemplateModal] = React.useState(false);
+  const [editingTemplate, setEditingTemplate] = React.useState<Template | null>(null);
   const [filterType, setFilterType] = React.useState<TemplateType | 'All'>('All');
 
   const safeTemplates = templates || [];
@@ -35,8 +39,8 @@ const AdminTemplateManagement: React.FC<AdminTemplateManagementProps> = ({ templ
     return groups;
   }, [filteredTemplates]);
 
-  const handleDeleteTemplate = (templateId: string) => {
-    if (window.confirm('Are you sure you want to delete this template? This cannot be undone.')) {
+  const handleDeleteTemplate = async (templateId: string) => {
+    if (await confirmDialog({ title: 'Delete template?', message: 'This cannot be undone.', confirmLabel: 'Delete', danger: true })) {
       onUpdateTemplates(safeTemplates.filter(t => t.id !== templateId));
     }
   };
@@ -94,19 +98,19 @@ const AdminTemplateManagement: React.FC<AdminTemplateManagementProps> = ({ templ
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
                         <button
-                          onClick={() => alert(`Edit for ${template.name} coming soon!`)}
+                          onClick={() => setEditingTemplate(template)}
                           className="text-sm px-3 py-1 rounded-md bg-blue-500 hover:bg-blue-600 text-white"
                           aria-label={`Edit ${template.name}`}
                         >
                           Edit
                         </button>
-                        <button
+                        {SHOW_DELETE && (<button
                           onClick={() => handleDeleteTemplate(template.id)}
                           className="text-sm px-3 py-1 rounded-md bg-red-500 hover:bg-red-600 text-white"
                           aria-label={`Delete ${template.name}`}
                         >
                           Delete
-                        </button>
+                        </button>)}
                       </div>
                     </div>
                   </div>
@@ -122,7 +126,7 @@ const AdminTemplateManagement: React.FC<AdminTemplateManagementProps> = ({ templ
         )}
       </div>
 
-      <NewTemplateModal isOpen={showNewTemplateModal} onClose={() => setShowNewTemplateModal(false)} onAddTemplate={onAddTemplate} />
+      <NewTemplateModal isOpen={showNewTemplateModal || !!editingTemplate} onClose={() => { setShowNewTemplateModal(false); setEditingTemplate(null); }} onAddTemplate={onAddTemplate} initial={editingTemplate} onSave={(data) => { if (editingTemplate) onUpdateTemplates(safeTemplates.map(t => t.id === editingTemplate.id ? { ...t, ...data } : t)); }} />
     </div>
   );
 };

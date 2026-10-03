@@ -4,6 +4,9 @@
 import React from 'react';
 import { PaymentPlan, PaymentPlanMilestone } from '../../types';
 import { v4 as uuidv4 } from 'uuid';
+import { confirmDialog } from '../ui/Confirm';
+import { toast } from '../ui/Toast';
+import { SHOW_DELETE } from '../../features';
 
 interface AdminPaymentPlanManagementProps {
   plans: PaymentPlan[];
@@ -26,8 +29,8 @@ const AdminPaymentPlanManagement: React.FC<AdminPaymentPlanManagementProps> = ({
     setSelectedPlanId(newPlan.id);
   };
 
-  const handleDeletePlan = (planId: string) => {
-    if (window.confirm('Are you sure you want to delete this payment plan?')) {
+  const handleDeletePlan = async (planId: string) => {
+    if (await confirmDialog({ title: 'Delete payment plan?', message: 'Bookings already using it keep their schedule.', confirmLabel: 'Delete', danger: true })) {
       onDeletePlan(planId);
       if (selectedPlanId === planId) {
         setSelectedPlanId(null);
@@ -61,7 +64,7 @@ const AdminPaymentPlanManagement: React.FC<AdminPaymentPlanManagementProps> = ({
   
   const handleRemoveMilestone = (milestoneId: string) => {
     if (!selectedPlan || selectedPlan.milestones.length <= 1) {
-        alert("A plan must have at least one milestone.");
+        toast.error("A plan must have at least one milestone.");
         return;
     };
     const updatedMilestones = selectedPlan.milestones.filter(m => m.id !== milestoneId);
@@ -76,7 +79,7 @@ const AdminPaymentPlanManagement: React.FC<AdminPaymentPlanManagementProps> = ({
       {/* Plan List */}
       <div className="w-full md:w-1/3 flex flex-col bg-[var(--dark-bg)] p-4 rounded-lg border border-[var(--light-bg)]">
         <div className="flex justify-between items-center mb-4">
-          <h4 className="font-semibold text-[var(--text-primary)]">Payment Plans</h4>
+          <h3 className="text-xl font-bold text-[var(--text-primary)]">Payment plans</h3>
           <button onClick={handleAddPlan} className="p-2 rounded-full text-sm text-[var(--text-primary)] bg-[var(--light-bg)] hover:bg-[var(--primary-color)]" title="Add New Plan">
             <i className="fas fa-plus"></i>
           </button>
@@ -108,9 +111,9 @@ const AdminPaymentPlanManagement: React.FC<AdminPaymentPlanManagementProps> = ({
                 onChange={handlePlanNameChange}
                 className="text-xl font-bold text-[var(--text-primary)] bg-transparent border-b-2 border-[var(--light-bg)] focus:border-[var(--primary-color)] focus:outline-none"
               />
-              <button onClick={() => handleDeletePlan(selectedPlan.id)} className="text-red-500 hover:text-red-400 p-2 rounded-full hover:bg-[var(--light-bg)]" title="Delete Plan">
+              {SHOW_DELETE && <button onClick={() => handleDeletePlan(selectedPlan.id)} className="text-red-500 hover:text-red-400 p-2 rounded-full hover:bg-[var(--light-bg)]" title="Delete Plan">
                 <i className="fas fa-trash-alt"></i>
-              </button>
+              </button>}
             </div>
             
             <div className="flex-1 overflow-y-auto pr-2">

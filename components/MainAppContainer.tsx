@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Lead, Message, NewLeadData, NewSiteVisitData, SiteVisit, NewTaskData, Task, User, NewFollowUpData, TaskStatus, LifecycleStage, LeadLifecycleStatus, SiteVisitStatus, Project, BookingDetails, PaymentPlan, FinancialSettings, UnitType, Source, LocationSetting, Budget, ClientProfile, LivingPlace, CustomerDocument, FormFieldConfig } from '../types';
+import { Lead, ChannelPartner, DistributionRule, Message, NewLeadData, NewSiteVisitData, SiteVisit, NewTaskData, Task, User, NewFollowUpData, TaskStatus, LifecycleStage, LeadLifecycleStatus, SiteVisitStatus, Project, BookingDetails, PaymentPlan, FinancialSettings, UnitType, Source, LocationSetting, Budget, ClientProfile, LivingPlace, CustomerDocument, FormFieldConfig } from '../types';
 import Sidebar from './Sidebar';
 import MainContent from './MainContent';
 import LeadModal from './LeadModal';
@@ -12,7 +12,8 @@ import AtsLineupModal from './modals/AtsLineupModal';
 import RegistrationDetailsModal from './modals/RegistrationDetailsModal';
 import ExecutionDetailsModal from './modals/ExecutionDetailsModal';
 import { v4 as uuidv4 } from 'uuid';
-import { Toaster } from './ui/Toast';
+import { Toaster, toast } from './ui/Toast';
+import { matchRule, pickAssignee } from '../distribution';
 
 type ActiveMenu = 'Leads' | 'Visits' | 'Booking' | 'Agreement' | 'Possession';
 type ContentTab = 'chat' | 'history' | 'details' | 'siteVisit' | 'booking' | 'ledger' | 'documents';
@@ -33,6 +34,11 @@ interface MainAppContainerProps {
   onLeadsUpdate: (updatedLeads: Lead[]) => void;
   onProjectsUpdate: (updatedProjects: Project[]) => void;
   onNavigateToAdmin: () => void;
+  /** Screens the signed-in user's role may open (see access.ts). */
+  allowedMenus?: string[];
+  channelPartners?: ChannelPartner[];
+  distributionRules?: DistributionRule[];
+  onSaveDistributionRule?: (rule: DistributionRule) => void;
   onLogout: () => void;
   onUpdateTaskStatus: (leadId: string, taskId: string, newStatus: TaskStatus) => void;
   onUpdateLeadLifecycle: (leadId: string, stage: LifecycleStage, newStatus: LeadLifecycleStatus) => void;
@@ -56,6 +62,10 @@ const MainAppContainer: React.FC<MainAppContainerProps> = ({
   onLeadsUpdate,
   onProjectsUpdate,
   onNavigateToAdmin,
+  allowedMenus,
+  channelPartners,
+  distributionRules,
+  onSaveDistributionRule,
   onLogout,
   onUpdateTaskStatus,
   onUpdateLeadLifecycle,
@@ -152,6 +162,11 @@ const MainAppContainer: React.FC<MainAppContainerProps> = ({
 
   const handleAddLead = React.useCallback((leadData: NewLeadData) => {
     const leadId = uuidv4();
+    // No owner chosen: let the distribution rules decide, else the person adding it.
+    const rule = leadData.ownerId ? undefined : matchRule(distributionRules || [], { project: leadData.leadProject, source: leadData.sourceName }, users);
+    const picked = rule ? pickAssignee(rule, users, leads) : null;
+    if (picked && rule) { if (picked.rule !== rule) onSaveDistributionRule?.(picked.rule); toast.info(`Assigned to ${picked.user.name} by "${rule.name}".`); }
+    const ownerId = leadData.ownerId || picked?.user.id || currentUser?.id || users.find(u => u.role === 'Sales')?.id || users[0]?.id || '';
     const fullName = `${leadData.firstName} ${leadData.lastName}`.trim();
     const interestText = (leadData.initialInterest || []).length > 0 ? leadData.initialInterest.join(', ') : 'a property';
     
@@ -165,7 +180,7 @@ const MainAppContainer: React.FC<MainAppContainerProps> = ({
             dueDate: leadData.followUp.date,
             priority: 'Medium',
             status: 'Pending',
-            assignedTo: leadData.followUp.assignedTo,
+            assignedTo: leadData.followUp.assignedTo || users.find(u => u.id === ownerId)?.name || '',
         });
     }
 
@@ -190,8 +205,9 @@ const MainAppContainer: React.FC<MainAppContainerProps> = ({
       tasks: tasks,
       channelSource: leadData.channelSource,
       leadSource: leadData.sourceName,
+      ...(leadData.channelPartnerId ? { channelPartnerId: leadData.channelPartnerId } : {}),
       propertyImages: [],
-      ownerId: leadData.ownerId || currentUser?.id || users.find(u => u.role === 'Sales')?.id || users[0]?.id || '',
+      ownerId,
       leadProject: leadData.leadProject || 'Not Assigned',
       leadDate: new Date().toISOString().split('T')[0],
       bookingStatus: 'Pending',
@@ -200,7 +216,7 @@ const MainAppContainer: React.FC<MainAppContainerProps> = ({
       customData: {},
     };
     onLeadsUpdate([...leads, newLead]);
-  }, [leads, onLeadsUpdate, users, currentUser]);
+  }, [leads, onLeadsUpdate, users, currentUser, distributionRules, onSaveDistributionRule]);
 
   const handleUpdateLead = React.useCallback((updatedLeadData: Lead) => {
     const updatedLeads = leads.map(lead => lead.id === updatedLeadData.id ? updatedLeadData : lead);
@@ -361,6 +377,7 @@ const MainAppContainer: React.FC<MainAppContainerProps> = ({
             onToggleSiteVisitModal={handleToggleSiteVisitModal} 
             onToggleFollowUpModal={handleToggleFollowUpModal} 
             onNavigateToAdmin={onNavigateToAdmin} 
+            allowedMenus={allowedMenus}
             onLogout={onLogout} 
             onUpdateSiteVisitStatus={handleUpdateSiteVisitStatus} 
             onToggleBookingModal={handleToggleBookingModal} 
@@ -404,7 +421,7 @@ const MainAppContainer: React.FC<MainAppContainerProps> = ({
       </div>
 
       <Toaster />
-      <LeadModal isOpen={showLeadModal} onClose={handleCloseLeadModal} onAddLead={handleAddLead} onUpdateLead={handleUpdateLead} leadToEdit={leadToEdit} unitTypes={unitTypes} locationSettings={locationSettings} sources={sources} budgets={budgets} clientProfiles={clientProfiles} livingPlaces={livingPlaces} projects={projects} formConfigs={formConfigs} users={users} currentUserId={currentUser?.id} />
+      <LeadModal isOpen={showLeadModal} onClose={handleCloseLeadModal} onAddLead={handleAddLead} onUpdateLead={handleUpdateLead} leadToEdit={leadToEdit} unitTypes={unitTypes} locationSettings={locationSettings} sources={sources} budgets={budgets} clientProfiles={clientProfiles} livingPlaces={livingPlaces} projects={projects} channelPartners={channelPartners} autoAssign={(distributionRules || []).some(r => r.enabled)} formConfigs={formConfigs} users={users} currentUserId={currentUser?.id} />
       <SiteVisitModal
         isOpen={showSiteVisitModal}
         onClose={() => setShowSiteVisitModal(false)}

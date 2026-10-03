@@ -24,6 +24,7 @@ export const COLLECTIONS: Record<string, { keyField: string }> = {
   userRoleSettings: { keyField: 'id' },
   userDesignations: { keyField: 'id' },
   channelPartners: { keyField: 'id' },
+  distributionRules: { keyField: 'id' },
   companyProfile: { keyField: 'name' },
   financialSettings: { keyField: 'id' },
   applicationSettings: { keyField: 'id' },

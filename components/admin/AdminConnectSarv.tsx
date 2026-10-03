@@ -1,5 +1,6 @@
 
 import React from 'react';
+import { toast } from '../ui/Toast';
 
 interface AdminConnectSarvProps {
   activeItem: string;
@@ -13,11 +14,8 @@ interface ConnectedEmailAccount {
   status: 'Connected' | 'Syncing' | 'Error';
 }
 
-// Mock data for connected accounts
-const MOCK_ACCOUNTS: ConnectedEmailAccount[] = [
-  { id: '1', provider: 'gmail', email: 'sales.team@example.com', status: 'Connected' },
-  { id: '2', provider: 'outlook', email: 'info@realestatepros.com', status: 'Syncing' },
-];
+// No email provider is wired up yet, so there are no connected accounts.
+const MOCK_ACCOUNTS: ConnectedEmailAccount[] = [];
 
 
 const AdminConnectSarv: React.FC<AdminConnectSarvProps> = ({ activeItem }) => {
@@ -56,7 +54,7 @@ const AdminConnectSarv: React.FC<AdminConnectSarvProps> = ({ activeItem }) => {
             <p className="text-sm text-[var(--text-secondary)] mb-6">Connect with your favorite cloud telephony provider to manage calls directly within LeadSarv.</p>
             <div className="flex justify-end mb-6">
                  <button 
-                    onClick={() => alert('Cloud Telephony connection flow coming soon!')}
+                    onClick={() => toast.info('Cloud telephony is coming soon.')}
                     className="px-4 py-2 rounded-md bg-[var(--primary-color)] text-white font-medium hover:bg-[#128c7e] transition-colors flex items-center gap-2"
                  >
                     <i className="fas fa-phone-alt"></i> Connect Provider
@@ -75,7 +73,7 @@ const AdminConnectSarv: React.FC<AdminConnectSarvProps> = ({ activeItem }) => {
             <p className="text-sm text-[var(--text-secondary)] mb-6">Integrate with WhatsApp Business API to send and receive messages from leads.</p>
             <div className="flex justify-end mb-6">
                  <button 
-                    onClick={() => alert('WhatsApp connection flow coming soon!')}
+                    onClick={() => toast.info('WhatsApp Business is coming soon.')}
                     className="px-4 py-2 rounded-md bg-[#25D366] text-white font-medium hover:bg-[#20bd5a] transition-colors flex items-center gap-2"
                  >
                     <i className="fab fa-whatsapp"></i> Connect Business Account
@@ -95,7 +93,7 @@ const AdminConnectSarv: React.FC<AdminConnectSarvProps> = ({ activeItem }) => {
             
             <div className="flex justify-end mb-6">
                  <button 
-                    onClick={() => alert('Email connection flow coming soon!')}
+                    onClick={() => toast.info('Email sync is coming soon.')}
                     className="px-4 py-2 rounded-md bg-[var(--primary-color)] text-white font-medium hover:bg-[#128c7e] transition-colors flex items-center gap-2"
                  >
                     <i className="fas fa-plus"></i> Connect New Account
@@ -123,13 +121,13 @@ const AdminConnectSarv: React.FC<AdminConnectSarvProps> = ({ activeItem }) => {
                                 </div>
                                 <div className="flex items-center gap-3 self-end sm:self-center">
                                     <button 
-                                        onClick={() => alert(`Refreshing sync for ${account.email}... (demo)`)}
+                                        onClick={() => toast.info('Email sync is coming soon.')}
                                         className="text-sm px-3 py-1 rounded-md bg-blue-600 hover:bg-blue-700 text-white transition-colors"
                                     >
                                         <i className="fas fa-sync-alt mr-1"></i> Refresh
                                     </button>
                                     <button 
-                                        onClick={() => alert(`Disconnecting ${account.email}... (demo)`)}
+                                        onClick={() => toast.info('Email sync is coming soon.')}
                                         className="text-sm px-3 py-1 rounded-md bg-red-600 hover:bg-red-700 text-white transition-colors"
                                     >
                                         <i className="fas fa-unlink mr-1"></i> Disconnect

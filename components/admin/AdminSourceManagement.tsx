@@ -2,6 +2,9 @@
 import React from 'react';
 import { Source, NewSourceData } from '../../types';
 import NewSourceModal from './NewSourceModal';
+import { confirmDialog } from '../ui/Confirm';
+import { toast } from '../ui/Toast';
+import { SHOW_DELETE } from '../../features';
 
 interface AdminSourceManagementProps {
   sources: Source[];
@@ -11,6 +14,7 @@ interface AdminSourceManagementProps {
 
 const AdminSourceManagement: React.FC<AdminSourceManagementProps> = ({ sources, onUpdateSources, onAddSource }) => {
   const [showNewSourceModal, setShowNewSourceModal] = React.useState(false);
+  const [editingSource, setEditingSource] = React.useState<Source | null>(null);
   const [searchTerm, setSearchTerm] = React.useState('');
   const [expandedChannels, setExpandedChannels] = React.useState<Record<string, boolean>>({});
 
@@ -49,12 +53,12 @@ const AdminSourceManagement: React.FC<AdminSourceManagementProps> = ({ sources, 
     return groups;
   }, [filteredSources]);
 
-  const handleDeleteSource = React.useCallback((sourceId: string) => {
+  const handleDeleteSource = React.useCallback(async (sourceId: string) => {
     const safeSources = sources || [];
-    if (window.confirm('Are you sure you want to delete this source? This action cannot be undone.')) {
+    if (await confirmDialog({ title: 'Delete this source?', message: 'This cannot be undone.', confirmLabel: 'Delete', danger: true })) {
       const updatedSources = safeSources.filter(source => source.id !== sourceId);
       onUpdateSources(updatedSources);
-      alert('Source deleted successfully!');
+      toast.success('Source deleted.');
     }
   }, [sources, onUpdateSources]);
 
@@ -125,19 +129,19 @@ const AdminSourceManagement: React.FC<AdminSourceManagementProps> = ({ sources, 
                           <td className="px-4 py-4 whitespace-nowrap text-sm font-medium">
                             <div className="flex items-center gap-2">
                               <button
-                                onClick={() => alert(`Edit functionality for ${source.name} coming soon!`)}
+                                onClick={() => setEditingSource(source)}
                                 className="text-sm px-3 py-1 rounded-md bg-blue-500 hover:bg-blue-600 text-white"
                                 aria-label={`Edit ${source.name}`}
                               >
                                 Edit
                               </button>
-                              <button
+                              {SHOW_DELETE && (<button
                                 onClick={() => handleDeleteSource(source.id)}
                                 className="text-sm px-3 py-1 rounded-md bg-red-500 hover:bg-red-600 text-white"
                                 aria-label={`Delete ${source.name}`}
                               >
                                 Delete
-                              </button>
+                              </button>)}
                             </div>
                           </td>
                         </tr>
@@ -151,7 +155,7 @@ const AdminSourceManagement: React.FC<AdminSourceManagementProps> = ({ sources, 
         )}
       </div>
 
-      <NewSourceModal isOpen={showNewSourceModal} onClose={() => setShowNewSourceModal(false)} onAddSource={onAddSource} sources={sources || []} />
+      <NewSourceModal isOpen={showNewSourceModal || !!editingSource} onClose={() => { setShowNewSourceModal(false); setEditingSource(null); }} onAddSource={onAddSource} sources={sources || []} initial={editingSource} onSave={(data) => { if (editingSource) onUpdateSources((sources || []).map(s => s.id === editingSource.id ? { ...s, ...data } : s)); }} />
     </div>
   );
 };

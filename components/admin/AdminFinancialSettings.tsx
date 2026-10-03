@@ -2,6 +2,8 @@
 import React from 'react';
 import { FinancialSettings, ConditionalFinancialRule, ConditionOperator, FinancialRuleType, OtherChargeSetting, OtherChargeBasis, CustomChargeSetting } from '../../types';
 import { v4 as uuidv4 } from 'uuid';
+import { toast } from '../ui/Toast';
+import { SHOW_DELETE } from '../../features';
 
 interface AdminFinancialSettingsProps {
   settings: FinancialSettings;
@@ -93,7 +95,7 @@ const AdminFinancialSettings: React.FC<AdminFinancialSettingsProps> = ({ setting
   const handleDeleteRule = (ruleId: string, ruleType: 'stampDuty' | 'registration') => {
     const rulesKey = ruleType === 'stampDuty' ? 'stampDutyRules' : 'registrationRules';
     if ((formData[rulesKey]).length <= 1) {
-        alert("At least one rule is required.");
+        toast.error("At least one rule is required.");
         return;
     }
     setFormData(prev => ({
@@ -174,7 +176,7 @@ const AdminFinancialSettings: React.FC<AdminFinancialSettingsProps> = ({ setting
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onUpdateSettings(formData);
-    alert('Financial settings updated successfully!');
+    toast.success('Financial settings saved.');
   };
 
   const RuleEditor: React.FC<{
@@ -209,9 +211,9 @@ const AdminFinancialSettings: React.FC<AdminFinancialSettingsProps> = ({ setting
                   <input type="number" placeholder="Amount" value={rule.fixedAmount || ''} onChange={e => handleRuleChange(rule.id, 'fixedAmount', e.target.value, ruleType)} className="p-2 w-28 rounded-md border border-[var(--light-bg)] bg-[var(--medium-bg)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary-color)] text-sm" />
               </div>
           )}
-          <button type="button" onClick={() => handleDeleteRule(rule.id, ruleType)} className="ml-auto text-red-500 hover:text-red-400 p-2 rounded-full hover:bg-[var(--light-bg)]" title="Delete Rule">
+          {SHOW_DELETE && <button type="button" onClick={() => handleDeleteRule(rule.id, ruleType)} className="ml-auto text-red-500 hover:text-red-400 p-2 rounded-full hover:bg-[var(--light-bg)]" title="Delete Rule">
               <i className="fas fa-trash-alt"></i>
-          </button>
+          </button>}
       </div>
   );
   
@@ -319,9 +321,9 @@ const AdminFinancialSettings: React.FC<AdminFinancialSettingsProps> = ({ setting
                     </div>
                 )}
             </div>
-            <button type="button" onClick={() => handleDeleteCustomCharge(charge.id)} className="absolute top-2 right-2 text-red-500 hover:text-red-400 p-1 rounded-full hover:bg-[var(--light-bg)]" title="Delete Charge">
+            {SHOW_DELETE && <button type="button" onClick={() => handleDeleteCustomCharge(charge.id)} className="absolute top-2 right-2 text-red-500 hover:text-red-400 p-1 rounded-full hover:bg-[var(--light-bg)]" title="Delete Charge">
                   <i className="fas fa-trash-alt"></i>
-            </button>
+            </button>}
           </div>
       </div>
   );

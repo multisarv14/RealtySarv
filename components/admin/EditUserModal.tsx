@@ -1,6 +1,6 @@
-
 import React from 'react';
-import { User } from '../../types';
+import { User, UserRole } from '../../types';
+import { Modal, Field, Section, inputCls } from '../ui/Modal';
 
 interface EditUserModalProps {
   isOpen: boolean;
@@ -8,142 +8,86 @@ interface EditUserModalProps {
   user: User | null;
   onSaveUser: (updatedUser: User) => void;
   users: User[];
+  /** The signed-in admin: cannot demote themselves. */
+  currentUserId?: string;
 }
 
-const EditUserModal: React.FC<EditUserModalProps> = ({ isOpen, onClose, user, onSaveUser, users }) => {
+/** Everyone below `id` in the reporting tree (they cannot be chosen as that person's manager). */
+const descendantIds = (id: string, users: User[]): Set<string> => {
+  const out = new Set<string>();
+  const walk = (parent: string) => users.forEach(u => { if (u.reportsTo === parent && !out.has(u.id)) { out.add(u.id); walk(u.id); } });
+  walk(id);
+  return out;
+};
+
+const EditUserModal: React.FC<EditUserModalProps> = ({ isOpen, onClose, user, onSaveUser, users, currentUserId }) => {
   const [name, setName] = React.useState('');
   const [email, setEmail] = React.useState('');
   const [phone, setPhone] = React.useState('');
+  const [role, setRole] = React.useState<UserRole>('User');
+  const [reportsTo, setReportsTo] = React.useState('');
   const [newPassword, setNewPassword] = React.useState('');
   const [confirmNewPassword, setConfirmNewPassword] = React.useState('');
-  const [reportsTo, setReportsTo] = React.useState('');
-  const [errors, setErrors] = React.useState<Record<string, string>>({});
+  const [submitted, setSubmitted] = React.useState(false);
 
   React.useEffect(() => {
-    if (user) {
-      setName(user.name);
-      setEmail(user.email);
-      setPhone(user.phone || '');
-      setReportsTo(user.reportsTo || '');
-      setNewPassword('');
-      setConfirmNewPassword('');
-      setErrors({});
-    }
-  }, [user]);
+    if (!isOpen || !user) return;
+    setName(user.name); setEmail(user.email); setPhone(user.phone || ''); setRole(user.role);
+    setReportsTo(user.reportsTo || ''); setNewPassword(''); setConfirmNewPassword(''); setSubmitted(false);
+  }, [isOpen, user]);
 
-  const validate = () => {
-    const newErrors: Record<string, string> = {};
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (email.trim() && !emailRegex.test(email)) {
-      newErrors.email = 'Please enter a valid email address.';
-    }
-    if (newPassword && newPassword.length < 6) {
-      newErrors.newPassword = 'New password must be at least 6 characters long.';
-    }
-    if (newPassword && newPassword !== confirmNewPassword) {
-      newErrors.confirmNewPassword = 'Passwords do not match.';
-    }
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+  if (!user) return null;
+
+  const isSelf = user.id === currentUserId;
+  const lastAdmin = user.role === 'Admin' && user.isActive && users.filter(u => u.role === 'Admin' && u.isActive).length <= 1;
+  const roleLocked = isSelf || lastAdmin;
+  const blocked = descendantIds(user.id, users);
+  const managers = users.filter(u => u.id !== user.id && !blocked.has(u.id));
+
+  const errors = {
+    name: name.trim() ? '' : 'Enter the full name.',
+    email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) ? '' : 'Enter a valid email address.',
+    newPassword: newPassword && newPassword.length < 6 ? 'At least 6 characters.' : '',
+    confirmNewPassword: newPassword && newPassword !== confirmNewPassword ? 'Passwords do not match.' : '',
   };
+  const err = (k: keyof typeof errors) => (submitted && errors[k]) || null;
 
-  const handleInputChange = (setter: React.Dispatch<React.SetStateAction<string>>, field: string) => (e: React.ChangeEvent<HTMLInputElement>) => {
-    setter(e.target.value);
-    if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: '' }));
-    }
-  };
-
-  const handleSubmit = React.useCallback((e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
-
-    if (validate()) {
-      const updatedUser: User = { 
-        ...user, 
-        name: name.trim(), 
-        email: email.trim(), 
-        phone: phone.trim(),
-        reportsTo: reportsTo || null,
-      };
-      
-      if (newPassword) {
-        updatedUser.password = newPassword;
-      }
-
-      onSaveUser(updatedUser);
-      onClose();
-    } else {
-        // Validation errors are displayed on the form
-    }
-  }, [name, email, phone, newPassword, confirmNewPassword, reportsTo, user, errors, onSaveUser, onClose]);
-
-  if (!isOpen || !user) return null;
-  
-  const potentialManagers = users.filter(u => u.id !== user.id); // A user cannot report to themselves
+    setSubmitted(true);
+    if (Object.values(errors).some(Boolean)) return;
+    const updated: User = { ...user, name: name.trim(), email: email.trim(), phone: phone.trim(), role, reportsTo: reportsTo || null };
+    if (newPassword) updated.password = newPassword;
+    onSaveUser(updated);
+    onClose();
+  };
 
   return (
-    <div
-      className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50 animate-fadeIn"
-      onClick={onClose}
-      aria-labelledby="editUserModalTitle"
-      role="dialog"
-      aria-modal="true"
-    >
-      <div
-        className="bg-[var(--medium-bg)] p-6 sm:p-8 rounded-lg shadow-xl w-11/12 max-w-lg relative"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3 id="editUserModalTitle" className="text-xl sm:text-2xl font-bold mb-6 text-[var(--text-primary)] text-center">
-          Edit User: {user?.name}
-        </h3>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <div>
-            <label htmlFor="editUserName" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Full Name</label>
-            <input type="text" id="editUserName" value={name} onChange={handleInputChange(setName, 'name')} className="w-full p-3 rounded-md border border-[var(--light-bg)] bg-[var(--dark-bg)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary-color)]" required />
-          </div>
-          <div>
-            <label htmlFor="editUserUsername" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Username (Read-only)</label>
-            <input type="text" id="editUserUsername" value={user.username} readOnly className="w-full p-3 rounded-md border border-[var(--light-bg)] bg-[var(--dark-bg)] text-[var(--text-secondary)] focus:outline-none cursor-not-allowed" />
-          </div>
-          <div>
-            <label htmlFor="editUserEmail" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Email</label>
-            <input type="email" id="editUserEmail" value={email} onChange={handleInputChange(setEmail, 'email')} onBlur={validate} className={`w-full p-3 rounded-md border ${errors.email ? 'border-red-500' : 'border-[var(--light-bg)]'} bg-[var(--dark-bg)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary-color)]`} required />
-            {errors.email && <span className="text-red-500 text-xs mt-1 block">{errors.email}</span>}
-          </div>
-          <div>
-            <label htmlFor="editUserPhone" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Mobile Number</label>
-            <input type="tel" id="editUserPhone" value={phone} onChange={handleInputChange(setPhone, 'phone')} className="w-full p-3 rounded-md border border-[var(--light-bg)] bg-[var(--dark-bg)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary-color)]" required />
-          </div>
-           <div>
-              <label htmlFor="editReportsTo" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Reports To</label>
-              <select id="editReportsTo" value={reportsTo} onChange={(e) => setReportsTo(e.target.value)} className="w-full p-3 rounded-md border border-[var(--light-bg)] bg-[var(--dark-bg)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary-color)]">
-                <option value="">-- None --</option>
-                {potentialManagers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-              </select>
-            </div>
-          <div className="pt-4 mt-2 border-t border-[var(--light-bg)]">
-            <p className="text-sm text-[var(--text-secondary)] mb-2">Change Password (optional)</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="editNewPassword" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">New Password</label>
-                <input type="password" id="editNewPassword" value={newPassword} onChange={handleInputChange(setNewPassword, 'newPassword')} onBlur={validate} placeholder="••••••••" className={`w-full p-3 rounded-md border ${errors.newPassword ? 'border-red-500' : 'border-[var(--light-bg)]'} bg-[var(--dark-bg)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary-color)]`} />
-                {errors.newPassword && <span className="text-red-500 text-xs mt-1 block">{errors.newPassword}</span>}
-              </div>
-              <div>
-                <label htmlFor="editConfirmNewPassword" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Confirm New Password</label>
-                <input type="password" id="editConfirmNewPassword" value={confirmNewPassword} onChange={handleInputChange(setConfirmNewPassword, 'confirmNewPassword')} onBlur={validate} placeholder="••••••••" className={`w-full p-3 rounded-md border ${errors.confirmNewPassword ? 'border-red-500' : 'border-[var(--light-bg)]'} bg-[var(--dark-bg)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary-color)]`} />
-                {errors.confirmNewPassword && <span className="text-red-500 text-xs mt-1 block">{errors.confirmNewPassword}</span>}
-              </div>
-            </div>
-          </div>
-          <div className="flex justify-end gap-3 mt-4">
-            <button type="button" onClick={onClose} className="px-5 py-2 rounded-md bg-gray-700 text-[var(--text-primary)] font-medium hover:bg-gray-600 transition-colors">Cancel</button>
-            <button type="submit" className="px-5 py-2 rounded-md bg-[var(--primary-color)] text-white font-medium hover:bg-[#128c7e] transition-colors">Save Changes</button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <Modal isOpen={isOpen} onClose={onClose} size="lg" title="Edit user" subtitle={`@${user.username}`} onSubmit={handleSubmit} submitLabel="Save changes">
+      <Section title="Profile">
+        <Field label="Full name" htmlFor="editUserName" required error={err('name')}><input id="editUserName" value={name} onChange={e => setName(e.target.value)} className={inputCls(!!err('name'))} /></Field>
+        <Field label="Email" htmlFor="editUserEmail" required error={err('email')}><input id="editUserEmail" type="email" value={email} onChange={e => setEmail(e.target.value)} className={inputCls(!!err('email'))} /></Field>
+        <Field label="Phone" htmlFor="editUserPhone"><input id="editUserPhone" type="tel" value={phone} onChange={e => setPhone(e.target.value)} className={inputCls()} /></Field>
+        <Field label="Username" htmlFor="editUserUsername" hint="Cannot be changed."><input id="editUserUsername" value={user.username} readOnly disabled className={inputCls()} /></Field>
+      </Section>
+      <Section title="Access">
+        <Field label="Role" htmlFor="editUserRole" hint={isSelf ? 'You cannot change your own role.' : lastAdmin ? 'The company needs at least one active Admin.' : undefined}>
+          <select id="editUserRole" value={role} disabled={roleLocked} onChange={e => setRole(e.target.value as UserRole)} className={inputCls()}>
+            <option value="User">User</option><option value="Sales">Sales</option><option value="Admin">Admin</option>
+          </select>
+        </Field>
+        <Field label="Reports to" htmlFor="editReportsTo">
+          <select id="editReportsTo" value={reportsTo} onChange={e => setReportsTo(e.target.value)} className={inputCls()}>
+            <option value="">None</option>
+            {managers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+          </select>
+        </Field>
+      </Section>
+      <Section title="Change password (optional)">
+        <Field label="New password" htmlFor="editNewPassword" error={err('newPassword')}><input id="editNewPassword" type="password" autoComplete="new-password" value={newPassword} onChange={e => setNewPassword(e.target.value)} className={inputCls(!!err('newPassword'))} /></Field>
+        <Field label="Confirm new password" htmlFor="editConfirmNewPassword" error={err('confirmNewPassword')}><input id="editConfirmNewPassword" type="password" autoComplete="new-password" value={confirmNewPassword} onChange={e => setConfirmNewPassword(e.target.value)} className={inputCls(!!err('confirmNewPassword'))} /></Field>
+      </Section>
+    </Modal>
   );
 };
 

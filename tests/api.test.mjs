@@ -61,7 +61,7 @@ describe('creating a company', () => {
 describe('sign in', () => {
   test('username and email both work; wrong password / unknown user / empty are refused', async () => {
     assert.equal((await call('/auth/login', { method: 'POST', host: H, body: { identity: 'ss', password: 'sss' } })).status, 200);
-    assert.equal((await call('/auth/login', { method: 'POST', host: H, body: { identity: 'john.doe@example.com', password: 'sss' } })).status, 200);
+    assert.equal((await call('/auth/login', { method: 'POST', host: H, body: { identity: 'sandeep@multisarv.com', password: 'sss' } })).status, 200);
     assert.equal((await call('/auth/login', { method: 'POST', host: H, body: { identity: 'ss', password: 'nope' } })).status, 401);
     assert.equal((await call('/auth/login', { method: 'POST', host: H, body: { identity: 'ghost', password: 'x' } })).status, 401);
     assert.equal((await call('/auth/login', { method: 'POST', host: H, body: {} })).status, 400);

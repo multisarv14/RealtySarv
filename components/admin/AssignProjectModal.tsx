@@ -1,5 +1,6 @@
 import React from 'react';
 import { User, Project } from '../../types';
+import { Modal } from '../ui/Modal';
 
 interface AssignProjectModalProps {
   isOpen: boolean;
@@ -10,66 +11,47 @@ interface AssignProjectModalProps {
 }
 
 const AssignProjectModal: React.FC<AssignProjectModalProps> = ({ isOpen, onClose, user, projects, onAssignProjects }) => {
-  const [selectedProjectIds, setSelectedProjectIds] = React.useState<string[]>([]);
-  
-  React.useEffect(() => {
-    if (user) {
-      setSelectedProjectIds(user.assignedProjectIds);
-    }
-  }, [user]);
+  const [selected, setSelected] = React.useState<string[]>([]);
 
-  const handleCheckboxChange = (projectId: string) => {
-    setSelectedProjectIds(prev => 
-      prev.includes(projectId) ? prev.filter(id => id !== projectId) : [...prev, projectId]
-    );
-  };
-  
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    onAssignProjects(user.id, selectedProjectIds);
-    onClose();
-  };
+  React.useEffect(() => { if (isOpen && user) setSelected(user.assignedProjectIds || []); }, [isOpen, user]);
 
-  if (!isOpen || !user) return null;
+  const toggle = (id: string) => setSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  const allOn = projects.length > 0 && selected.length === projects.length;
 
   return (
-    <div
-      className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50 animate-fadeIn"
-      onClick={onClose}
-      aria-labelledby="assignProjectModalTitle"
-      role="dialog"
-      aria-modal="true"
+    <Modal
+      isOpen={isOpen} onClose={onClose} size="md" title="Assign projects" subtitle={user?.name}
+      onSubmit={(e) => { e.preventDefault(); onAssignProjects(user.id, selected); onClose(); }}
+      submitLabel="Save assignments"
     >
-      <div
-        className="bg-[var(--medium-bg)] p-6 sm:p-8 rounded-lg shadow-xl w-11/12 max-w-lg relative"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3 id="assignProjectModalTitle" className="text-xl sm:text-2xl font-bold mb-6 text-[var(--text-primary)] text-center">Assign Projects to {user.name}</h3>
-        <form onSubmit={handleSubmit}>
-          <div className="space-y-4 max-h-60 overflow-y-auto pr-2 mb-6 border border-[var(--dark-bg)] p-4 rounded-md">
-            {projects.length === 0 ? (
-              <p className="text-center text-[var(--text-secondary)]">No projects available to assign.</p>
-            ) : (
-              projects.map(project => (
-                <label key={project.id} className="flex items-center gap-3 p-3 rounded-md bg-[var(--dark-bg)] hover:bg-[var(--light-bg)] cursor-pointer transition-colors">
-                  <input 
-                    type="checkbox"
-                    checked={selectedProjectIds.includes(project.id)}
-                    onChange={() => handleCheckboxChange(project.id)}
-                    className="h-5 w-5 rounded border-gray-300 text-[var(--primary-color)] focus:ring-[var(--primary-color)] bg-[var(--dark-bg)]"
-                  />
-                  <span className="text-[var(--text-primary)]">{project.name}</span>
-                </label>
-              ))
-            )}
+      {projects.length === 0 ? (
+        <p className="text-sm text-[var(--text-secondary)] text-center py-4">No projects yet. Register a project first.</p>
+      ) : (
+        <>
+          <div className="flex items-center justify-between text-xs text-[var(--text-secondary)]">
+            <span>{selected.length} of {projects.length} selected</span>
+            <button type="button" onClick={() => setSelected(allOn ? [] : projects.map(p => p.id))} className="font-semibold text-[var(--primary-color)] hover:underline">{allOn ? 'Clear all' : 'Select all'}</button>
           </div>
-          <div className="flex justify-end gap-3 mt-4">
-            <button type="button" onClick={onClose} className="px-5 py-2 rounded-md bg-gray-700 text-[var(--text-primary)] font-medium hover:bg-gray-600 transition-colors">Cancel</button>
-            <button type="submit" className="px-5 py-2 rounded-md bg-[var(--primary-color)] text-white font-medium hover:bg-[#128c7e] transition-colors">Save Assignments</button>
-          </div>
-        </form>
-      </div>
-    </div>
+          <ul className="space-y-2" aria-label="Projects">
+            {projects.map(p => {
+              const on = selected.includes(p.id);
+              return (
+                <li key={p.id}>
+                  <label className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${on ? 'border-[var(--primary-color)] bg-[color-mix(in_srgb,var(--primary-color)_12%,transparent)]' : 'border-[var(--border-color)] hover:bg-[var(--light-bg)]'}`}>
+                    <input type="checkbox" checked={on} onChange={() => toggle(p.id)} className="h-4 w-4 accent-[var(--primary-color)]" />
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium text-[var(--text-primary)] truncate">{p.name}</span>
+                      <span className="block text-xs text-[var(--text-secondary)] truncate">{[p.location, p.projectStatus].filter(Boolean).join(' · ')}</span>
+                    </span>
+                  </label>
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      )}
+    </Modal>
   );
 };
+
 export default AssignProjectModal;

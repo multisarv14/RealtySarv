@@ -1,14 +1,15 @@
 
 import React from 'react';
 import NewGenericSettingModal from './NewGenericSettingModal';
-import AssignMenuAccessModal from './AssignMenuAccessModal';
 import { UserRoleSetting } from '../../types';
+import { confirmDialog } from '../ui/Confirm';
+import { toast } from '../ui/Toast';
+import { SHOW_DELETE } from '../../features';
 
 interface Item {
   id: string;
   name: string;
   description?: string;
-  menuAccess?: string[];
 }
 
 interface AdminGenericSettingManagementProps {
@@ -17,13 +18,11 @@ interface AdminGenericSettingManagementProps {
   items: Item[];
   onUpdateItems: (updatedItems: Item[]) => void;
   onAddItem: (itemData: { name: string; description?: string }) => void;
-  onUpdateMenuAccess?: (itemId: string, menus: string[]) => void;
 }
 
-const AdminGenericSettingManagement: React.FC<AdminGenericSettingManagementProps> = ({ title, itemNoun, items, onUpdateItems, onAddItem, onUpdateMenuAccess }) => {
+const AdminGenericSettingManagement: React.FC<AdminGenericSettingManagementProps> = ({ title, itemNoun, items, onUpdateItems, onAddItem }) => {
   const [showNewItemModal, setShowNewItemModal] = React.useState(false);
-  const [showMenuAccessModal, setShowMenuAccessModal] = React.useState(false);
-  const [selectedItem, setSelectedItem] = React.useState<Item | null>(null);
+  const [editingItem, setEditingItem] = React.useState<Item | null>(null);
   const [searchTerm, setSearchTerm] = React.useState('');
 
   const safeItems = React.useMemo(() => items || [], [items]);
@@ -36,23 +35,11 @@ const AdminGenericSettingManagement: React.FC<AdminGenericSettingManagementProps
     );
   }, [safeItems, searchTerm]);
 
-  const handleDeleteItem = (itemId: string) => {
-    if (window.confirm(`Are you sure you want to delete this ${itemNoun}? This action cannot be undone.`)) {
+  const handleDeleteItem = async (itemId: string) => {
+    if (await confirmDialog({ title: `Delete this ${itemNoun.toLowerCase()}?`, message: 'This cannot be undone.', confirmLabel: 'Delete', danger: true })) {
       const updatedItems = safeItems.filter(item => item.id !== itemId);
       onUpdateItems(updatedItems);
     }
-  };
-
-  const handleOpenMenuAccessModal = (item: Item) => {
-    setSelectedItem(item);
-    setShowMenuAccessModal(true);
-  };
-
-  const handleSaveMenuAccess = (itemId: string, menus: string[]) => {
-    if (onUpdateMenuAccess) {
-      onUpdateMenuAccess(itemId, menus);
-    }
-    setShowMenuAccessModal(false);
   };
 
   return (
@@ -105,28 +92,20 @@ const AdminGenericSettingManagement: React.FC<AdminGenericSettingManagementProps
                     <td className="px-4 py-4 text-sm text-[var(--text-secondary)]">{item.description || 'N/A'}</td>
                     <td className="px-4 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex items-center gap-2">
-                        {itemNoun === 'User Role' && onUpdateMenuAccess && (
-                          <button
-                            onClick={() => handleOpenMenuAccessModal(item)}
-                            className="text-sm px-3 py-1 rounded-md bg-purple-500 hover:bg-purple-600 text-white"
-                          >
-                            Menu Access
-                          </button>
-                        )}
                         <button
-                          onClick={() => alert(`Edit functionality for ${item.name} coming soon!`)}
+                          onClick={() => setEditingItem(item)}
                           className="text-sm px-3 py-1 rounded-md bg-blue-500 hover:bg-blue-600 text-white"
                           aria-label={`Edit ${item.name}`}
                         >
                           Edit
                         </button>
-                        <button
+                        {SHOW_DELETE && (<button
                           onClick={() => handleDeleteItem(item.id)}
                           className="text-sm px-3 py-1 rounded-md bg-red-500 hover:bg-red-600 text-white"
                           aria-label={`Delete ${item.name}`}
                         >
                           Delete
-                        </button>
+                        </button>)}
                       </div>
                     </td>
                   </tr>
@@ -138,21 +117,15 @@ const AdminGenericSettingManagement: React.FC<AdminGenericSettingManagementProps
       </div>
 
       <NewGenericSettingModal
-        isOpen={showNewItemModal}
-        onClose={() => setShowNewItemModal(false)}
+        isOpen={showNewItemModal || !!editingItem}
+        onClose={() => { setShowNewItemModal(false); setEditingItem(null); }}
         onAddItem={onAddItem}
+        initial={editingItem}
+        onSave={(data) => { if (editingItem) onUpdateItems(safeItems.map(i => i.id === editingItem.id ? { ...i, ...data } : i)); }}
         title={`Add New ${itemNoun}`}
         itemNoun={itemNoun}
       />
 
-      {itemNoun === 'User Role' && selectedItem && onUpdateMenuAccess && (
-        <AssignMenuAccessModal
-          isOpen={showMenuAccessModal}
-          onClose={() => setShowMenuAccessModal(false)}
-          role={selectedItem as UserRoleSetting}
-          onSave={handleSaveMenuAccess}
-        />
-      )}
     </div>
   );
 };

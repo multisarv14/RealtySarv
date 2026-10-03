@@ -1,4 +1,5 @@
 import React from 'react';
+import { toast } from '../ui/Toast';
 
 const StatCard: React.FC<{ icon: string; label: string; value: string; }> = ({ icon, label, value }) => (
     <div className="bg-[var(--dark-bg)] p-4 rounded-lg flex items-center gap-4 border border-[var(--light-bg)]">
@@ -30,10 +31,10 @@ const AdminBilling: React.FC = () => {
                         </p>
                     </div>
                     <div className="flex gap-3">
-                         <button onClick={() => alert("Redirecting to billing portal...")} className="px-4 py-2 rounded-md bg-gray-700 text-[var(--text-primary)] font-medium hover:bg-gray-600 transition-colors">
+                         <button onClick={() => toast.info("Billing portal is coming soon. Write to info@multisarv.com for plan changes.")} className="px-4 py-2 rounded-md bg-gray-700 text-[var(--text-primary)] font-medium hover:bg-gray-600 transition-colors">
                             Manage Subscription
                         </button>
-                        <button onClick={() => alert("Plan change flow coming soon!")} className="px-4 py-2 rounded-md bg-[var(--primary-color)] text-white font-medium hover:bg-[#128c7e] transition-colors">
+                        <button onClick={() => toast.info("Write to info@multisarv.com to change your plan.")} className="px-4 py-2 rounded-md bg-[var(--primary-color)] text-white font-medium hover:bg-[#128c7e] transition-colors">
                             Change Plan
                         </button>
                     </div>

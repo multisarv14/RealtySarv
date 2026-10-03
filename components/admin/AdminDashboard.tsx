@@ -12,6 +12,8 @@ interface AdminDashboardProps {
   onViewReports: () => void;
 }
 
+const formatInr = (n: number) => n >= 1e7 ? `₹${(n / 1e7).toFixed(2)} Cr` : n >= 1e5 ? `₹${(n / 1e5).toFixed(2)} L` : `₹${Math.round(n).toLocaleString('en-IN')}`;
+
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ leads, projects, users, onAddUser, onAddProject, onViewReports }) => {
   const stats = React.useMemo(() => {
     const safeLeads = leads || [];
@@ -50,7 +52,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ leads, projects, users,
 
         {/* KPI Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <StatCard icon="fas fa-wallet" label="Total Revenue" value={`₹${(stats.convertedRevenue / 100000).toFixed(2)} L`} subtext="From converted leads" />
+            <StatCard icon="fas fa-wallet" label="Total Revenue" value={formatInr(stats.convertedRevenue)} subtext="From converted leads" />
             <StatCard icon="fas fa-users" label="Active Leads" value={stats.totalLeads.toLocaleString()} subtext={`${stats.leadsToday} new today`} />
             <StatCard icon="fas fa-building" label="Active Projects" value={stats.activeProjects.toLocaleString()} subtext={`${projects?.length || 0} total projects`} />
             <StatCard icon="fas fa-user-friends" label="Team Size" value={stats.teamSize.toLocaleString()} subtext="Active users" />
@@ -61,7 +63,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ leads, projects, users,
             <div className="lg:col-span-2 bg-[var(--medium-bg)] rounded-lg shadow-md border border-[var(--light-bg)] flex flex-col">
                 <div className="p-4 border-b border-[var(--light-bg)] flex justify-between items-center">
                     <h3 className="font-bold text-[var(--text-primary)]">Recent Leads</h3>
-                    <button className="text-xs text-[var(--primary-color)] hover:underline">View All</button>
                 </div>
                 <div className="flex-1 overflow-y-auto p-2">
                     {recentLeads.length === 0 ? (
@@ -102,21 +103,17 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ leads, projects, users,
 
             {/* Right Column Widgets */}
             <div className="flex flex-col gap-6">
-                 {/* System Status */}
+                 {/* Today */}
                  <div className="bg-[var(--medium-bg)] rounded-lg shadow-md border border-[var(--light-bg)] p-4">
-                    <h3 className="font-bold text-[var(--text-primary)] mb-4">System Status</h3>
-                    <div className="space-y-3">
-                         <div className="flex justify-between items-center text-sm">
-                             <span className="text-[var(--text-secondary)]"><i className="fas fa-database mr-2 text-green-500"></i> Database</span>
-                             <span className="text-green-400 font-medium">Online</span>
+                    <h3 className="font-bold text-[var(--text-primary)] mb-4">Today</h3>
+                    <div className="space-y-3 text-sm">
+                         <div className="flex justify-between items-center">
+                             <span className="text-[var(--text-secondary)]"><i className="fas fa-user-plus mr-2 text-[var(--primary-color)]"></i> New leads</span>
+                             <span className="text-[var(--text-primary)] font-semibold">{stats.leadsToday}</span>
                          </div>
-                         <div className="flex justify-between items-center text-sm">
-                             <span className="text-[var(--text-secondary)]"><i className="fas fa-envelope mr-2 text-green-500"></i> Email Service</span>
-                             <span className="text-green-400 font-medium">Operational</span>
-                         </div>
-                         <div className="flex justify-between items-center text-sm">
-                             <span className="text-[var(--text-secondary)]"><i className="fab fa-whatsapp mr-2 text-yellow-500"></i> WhatsApp API</span>
-                             <span className="text-yellow-400 font-medium">Connecting...</span>
+                         <div className="flex justify-between items-center">
+                             <span className="text-[var(--text-secondary)]"><i className="fas fa-list-check mr-2 text-[var(--primary-color)]"></i> Open follow-ups</span>
+                             <span className="text-[var(--text-primary)] font-semibold">{stats.pendingTasks}</span>
                          </div>
                     </div>
                  </div>

@@ -100,13 +100,13 @@ const LeadAnalytics: React.FC<LeadAnalyticsProps> = ({ leads, projects }) => {
                 <ChartCard title="Leads by Source">
                     <div className="flex justify-around items-end h-64 border-l border-b border-[var(--light-bg)] pl-2 pb-2">
                         {Object.entries(analyticsData.leadsBySource).map(([source, count]) => (
-                            <div key={source} className="flex flex-col items-center flex-1" title={`${source}: ${count} leads`}>
+                            <div key={source} className="flex flex-col items-center justify-end h-full flex-1 min-w-0" title={`${source}: ${count} leads`}>
                                 <p className="text-xs text-[var(--text-secondary)]">{count as number}</p>
                                 <div 
                                     className="w-3/4 max-w-[40px] bg-[var(--primary-color)] rounded-t-md hover:opacity-80 transition-opacity" 
                                     style={{ height: `${((count as number) / maxSourceCount) * 90}%` }}
                                 ></div>
-                                <p className="text-xs mt-2 text-[var(--text-secondary)] text-center break-words">{source}</p>
+                                <p className="text-xs mt-2 text-[var(--text-secondary)] text-center break-words w-full truncate">{source}</p>
                             </div>
                         ))}
                     </div>

@@ -1,5 +1,6 @@
 
 import React from 'react';
+import { toast } from '../ui/Toast';
 
 interface ProviderItem {
     id: string;
@@ -11,11 +12,9 @@ interface ProviderItem {
 }
 
 const STORAGE_PROVIDERS: ProviderItem[] = [
-    { id: 'gdrive', label: 'Google Drive', icon: 'fab fa-google-drive', color: 'text-green-500', status: 'Connected', description: 'Store files in Google Workspace.' },
-    { id: 'onedrive', label: 'OneDrive', icon: 'fab fa-microsoft', color: 'text-blue-600', status: 'Not Connected', description: 'Microsoft 365 cloud storage.' },
-    { id: 'sharepoint', label: 'SharePoint', icon: 'fas fa-share-alt-square', color: 'text-teal-600', status: 'Coming Soon', description: 'Enterprise content management.' },
-    { id: 'aws-s3', label: 'AWS S3', icon: 'fab fa-aws', color: 'text-orange-500', status: 'Connected', description: 'Scalable object storage.' },
-    { id: 'dropbox', label: 'Dropbox', icon: 'fab fa-dropbox', color: 'text-blue-400', status: 'Not Connected', description: 'File hosting service.' },
+    { id: 'gdrive', label: 'Google Drive', icon: 'fab fa-google-drive', color: 'text-green-500', status: 'Coming Soon', description: 'Store files in Google Workspace.' },
+    { id: 'onedrive', label: 'OneDrive', icon: 'fab fa-microsoft', color: 'text-blue-600', status: 'Coming Soon', description: 'Microsoft 365 cloud storage.' },
+    { id: 'aws-s3', label: 'AWS S3', icon: 'fab fa-aws', color: 'text-orange-500', status: 'Coming Soon', description: 'Scalable object storage.' },
 ];
 
 const USE_CASES = [
@@ -51,7 +50,7 @@ const ProviderCard: React.FC<{ item: ProviderItem }> = ({ item }) => (
                 : 'bg-[var(--medium-bg)] text-[var(--text-primary)] hover:bg-[var(--primary-color)] hover:text-white border border-[var(--light-bg)] group-hover:border-[var(--primary-color)]'
             }`}
             disabled={item.status === 'Coming Soon'}
-            onClick={() => alert(`Configuration for ${item.label} coming soon!`)}
+            onClick={() => toast.info(`${item.label} is coming soon.`)}
         >
             {item.status === 'Connected' ? 'Configure' : 'Connect'}
         </button>

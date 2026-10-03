@@ -273,7 +273,7 @@ describe('CRM: forms and popups (these change data)', () => {
   });
   test('Follow-up: quick dates, owner defaults to you, validates, saves', async () => {
     await p.getByRole('button', { name: 'Schedule follow-up' }).last().click(); await p.waitForTimeout(300);
-    assert.match(await dlg().innerText(), /Test Renamed/); assert.equal(await p.inputValue('#followUpAssignedTo'), 'John Doe');
+    assert.match(await dlg().innerText(), /Test Renamed/); assert.equal(await p.inputValue('#followUpAssignedTo'), 'Sandeep Shah');
     await dlg().getByRole('button', { name: 'Set reminder' }).click(); assert.ok((await dlg().locator('[role=alert]').count()) >= 1);
     await dlg().getByRole('radio', { name: 'In 3 days' }).click(); await p.fill('#followUpTime', '15:30');
     await dlg().getByRole('button', { name: 'Set reminder' }).click(); await p.waitForTimeout(1200);
@@ -351,5 +351,241 @@ describe('CRM: forms and popups (these change data)', () => {
     const box = await m.locator('[role=dialog]').boundingBox();
     assert.ok(Math.abs(box.y + box.height - 800) < 3 && box.width >= 388, 'touches the bottom, full width');
     assert.equal(await m.evaluate(() => document.documentElement.scrollWidth > innerWidth), false); await m.context().close();
+  });
+});
+
+describe('Admin: honest screens and in-app dialogs', () => {
+  let p, dialogs;
+  const section = async (name) => { await p.locator('aside button, nav button, button').filter({ hasText: new RegExp('^\\s*' + name + '\\s*$', 'i') }).first().click(); await p.waitForTimeout(500); };
+  before(async () => {
+    p = await open(); dialogs = [];
+    p.on('dialog', (d) => { dialogs.push(d.message()); d.dismiss(); });
+    await signIn(p);
+    await p.getByTitle('Open Admin Settings Control Panel').click(); await p.waitForTimeout(600);
+  });
+  after(async () => { await p.context().close(); });
+
+  test('header shows the screen name, not a raw slug', async () => {
+    await section('Partners');
+    assert.match(await p.locator('h3').first().innerText(), /Admin Console \/ Partners/i);
+  });
+  test('demo owner has a real name and no example.com address', async () => {
+    await section('Users');
+    const t = await p.locator('main, body').first().innerText();
+    assert.match(t, /Sandeep Shah/); assert.doesNotMatch(t, /example\.com|555/);
+  });
+  test('Users: list, filters, role badge, "You", and no inline role dropdown', async () => {
+    await section('Users');
+    const t = await p.locator('body').innerText();
+    assert.match(t, /Sandeep Shah\s*YOU/i);
+    assert.equal(await p.locator('select[aria-label^="Role for"]').count(), 0);
+    await p.getByRole('button', { name: /^Sales\s*\d/ }).click(); await p.waitForTimeout(200);
+    assert.equal(await p.locator('li', { hasText: '@aarav' }).count(), 1);
+    assert.equal(await p.locator('li', { hasText: '@ss ' }).count(), 0);
+    await p.getByRole('button', { name: /^All\s*\d/ }).click();
+  });
+  test('Users: you cannot deactivate yourself or the last Admin', async () => {
+    await p.getByLabel('Deactivate Sandeep Shah').click(); await p.waitForTimeout(300);
+    assert.match(await p.locator('[role=status]').innerText(), /cannot deactivate your own/i);
+    assert.equal(await p.getByRole('dialog').count(), 0);
+  });
+  test('Users: deactivating asks first; Edit has role + password, and your own role is locked', async () => {
+    await p.getByLabel('Deactivate Sneha Patil').click(); await p.waitForTimeout(300);
+    assert.ok(await p.getByRole('dialog').getByRole('button', { name: 'Deactivate' }).isVisible());
+    await p.keyboard.press('Escape'); await p.waitForTimeout(250);
+    assert.match(await p.locator('li', { hasText: '@sneha' }).innerText(), /Active/);
+    await p.getByLabel('Edit Sandeep Shah').click(); await p.waitForTimeout(300);
+    assert.equal(await p.locator('#editUserRole').isDisabled(), true);
+    await p.fill('#editNewPassword', 'abc'); await p.getByRole('button', { name: 'Save changes' }).click(); await p.waitForTimeout(250);
+    assert.ok((await p.getByRole('dialog').locator('[role=alert]').count()) >= 1);
+    await p.keyboard.press('Escape'); await p.waitForTimeout(250);
+  });
+  test('Users: Projects dialog selects and saves', async () => {
+    await p.getByLabel('Assign projects to Rohan Kulkarni').click(); await p.waitForTimeout(300);
+    await p.getByRole('dialog').getByLabel('Orchid Residency').uncheck();
+    await p.getByRole('dialog').getByLabel('The Grand Towers').check();
+    await p.getByRole('dialog').getByRole('button', { name: 'Save assignments' }).click(); await p.waitForTimeout(600);
+    assert.match(await p.locator('li', { hasText: '@rohan' }).innerText(), /The Grand Towers/);
+    assert.doesNotMatch(await p.locator('li', { hasText: '@rohan' }).innerText(), /Orchid Residency/);
+  });
+  test('Users menu groups People, Roles & access, Designations and Org chart', async () => {
+    if (!(await p.getByRole('button', { name: 'People', exact: true }).first().isVisible())) await section('Users');
+    for (const n of ['People', 'Roles & access', 'Designations', 'Org chart']) assert.ok(await p.getByRole('button', { name: n, exact: true }).first().isVisible(), n);
+    await p.getByRole('button', { name: 'Designations', exact: true }).first().click(); await p.waitForTimeout(300);
+    assert.match(await p.locator('h3').first().innerText(), /Users/i);
+    await p.getByRole('button', { name: 'Org chart', exact: true }).first().click(); await p.waitForTimeout(300);
+    assert.match(await p.locator('body').innerText(), /Sandeep Shah/);
+    await p.getByRole('button', { name: 'People', exact: true }).first().click(); await p.waitForTimeout(300);
+  });
+  test('Roles & access: Sales loses Visits when switched off, and never sees Admin settings', async () => {
+    await p.getByRole('button', { name: 'Roles & access', exact: true }).first().click(); await p.waitForTimeout(400);
+    assert.equal(await p.getByLabel('Admin can open Leads').isDisabled(), true);
+    await p.getByLabel('Sales can open Visits').click(); await p.waitForTimeout(700);
+    const s2 = await open(); await signIn(s2, COMPANY_URL, 'aarav', 'sss');
+    const tabs = await s2.locator('button:has(i.fa-map-marked-alt)').count();
+    const cog = await s2.getByTitle('Admin settings').count();
+    await s2.context().close();
+    await p.getByLabel('Sales can open Visits').click(); await p.waitForTimeout(700);
+    assert.equal(tabs, 0, 'Visits menu hidden for Sales');
+    assert.equal(cog, 0, 'Sales has no Admin settings cog');
+    await p.getByRole('button', { name: 'People', exact: true }).first().click(); await p.waitForTimeout(300);
+  });
+  test('Add user: validates inline in the shared dialog (no browser alert)', async () => {
+    await p.getByRole('button', { name: /Add New User/i }).click(); await p.waitForTimeout(300);
+    await p.getByRole('dialog').getByRole('button', { name: 'Add user' }).click(); await p.waitForTimeout(250);
+    assert.ok((await p.getByRole('dialog').locator('[role=alert]').count()) >= 1);
+    await p.keyboard.press('Escape'); await p.waitForTimeout(250);
+    assert.equal(await p.getByRole('dialog').count(), 0);
+  });
+  test('Lead Management, Lead Flow and Task Management are not in Admin (the CRM does these)', async () => {
+    const t = await p.locator('body').innerText();
+    assert.doesNotMatch(t, /LEAD MANAGEMENT|LEAD FLOW|TASK MANAGEMENT/);
+  });
+  test('integrations never claim to be connected', async () => {
+    await p.locator('button', { hasText: /^\s*Integrations\s*$/i }).first().click(); await p.waitForTimeout(300);
+    for (const name of ['Portals', 'Accounting', 'Marketing']) {
+      await p.getByRole('button', { name }).first().click(); await p.waitForTimeout(350);
+      const t = await p.locator('body').innerText();
+      assert.doesNotMatch(t, /\bConnected\b(?!\s*Accounts)/, `${name} shows a fake Connected badge`);
+    }
+    assert.match(await p.locator('body').innerText(), /Coming soon/i);
+  });
+  test('Reporting: source bars are drawn', async () => {
+    await section('Reports');
+    const h = await p.evaluate(() => [...document.querySelectorAll('div.rounded-t-md')].map(e => e.getBoundingClientRect().height));
+    assert.ok(h.length > 0 && h.every(x => x > 0), `bar heights ${h}`);
+  });
+  test('Delete buttons are hidden everywhere, and Edit still opens a form', async () => {
+    await section('Settings');
+    await p.locator('h4', { hasText: 'Lead Sources' }).first().click(); await p.waitForTimeout(500);
+    await p.getByRole('button', { name: /^Edit /i }).first().click(); await p.waitForTimeout(300);
+    assert.ok(await p.getByRole('dialog').getByRole('button', { name: 'Save changes' }).isVisible());
+    await p.keyboard.press('Escape'); await p.waitForTimeout(250);
+    assert.equal(await p.getByRole('button', { name: /^(Delete|Remove) /i }).count(), 0);
+    for (const [menu, sub] of [['Users', 'Designations'], ['Projects', 'Project types'], ['Projects', 'Payment plans']]) {
+      if (!(await p.getByRole('button', { name: sub, exact: true }).first().isVisible())) await section(menu);
+      await p.getByRole('button', { name: sub, exact: true }).first().click(); await p.waitForTimeout(400);
+      assert.equal(await p.getByRole('button', { name: /delete/i }).count() + await p.locator('[title^="Delete"]').count(), 0, sub);
+    }
+  });
+  test('Projects: list view with inventory progress, search, and a detail header', async () => {
+    const allProjects = p.getByRole('button', { name: 'All projects', exact: true }).first();
+    if (!(await allProjects.isVisible())) await section('Projects');
+    await allProjects.click(); await p.waitForTimeout(400);
+    const rows = p.locator('[role=button][aria-label^="Open "]');
+    assert.equal(await rows.count(), 3);
+    assert.match(await p.locator('body').innerText(), /sold\/booked/);
+    await p.getByLabel('Search projects').fill('serene'); await p.waitForTimeout(200);
+    assert.equal(await rows.count(), 1);
+    await rows.first().click(); await p.waitForTimeout(500);
+    const head = await p.locator('h3').filter({ hasText: 'Serene Gardens' }).first().locator('xpath=..').innerText();
+    assert.match(head, /Ready to Move/);
+    assert.doesNotMatch(await p.locator('body').innerText(), /- Inventory/);
+  });
+  test('Projects: Setup validates inline and Save waits for a change', async () => {
+    await p.getByRole('button', { name: 'Setup' }).first().click(); await p.waitForTimeout(300);
+    assert.equal(await p.getByRole('button', { name: 'Save changes' }).isDisabled(), true);
+    await p.fill('#projectName', ''); await p.getByRole('button', { name: 'Save changes' }).click(); await p.waitForTimeout(250);
+    assert.ok((await p.locator('[role=alert]').count()) >= 1);
+    await p.fill('#projectName', 'Serene Gardens');
+  });
+  test('Projects menu groups all project setup: types, stages, unit types, inventory states, payment plans', async () => {
+    const sub = (n) => p.getByRole('button', { name: n, exact: true }).first();
+    for (const [name, heading] of [['Project types', /Project types/], ['Construction stages', /Construction stages/], ['Unit types', /Unit types/], ['Inventory states', /Inventory states/], ['Payment plans', /Payment/i]]) {
+      await sub(name).click(); await p.waitForTimeout(400);
+      assert.match(await p.locator('h3').filter({ hasText: heading }).first().innerText(), heading, name);
+    }
+    await sub('All projects').click(); await p.waitForTimeout(400);
+    assert.equal(await p.locator('[role=button][aria-label^="Open "]').count(), 3);
+  });
+  test('Settings no longer has a Projects tab (it lives under Projects)', async () => {
+    await section('Settings');
+    assert.equal(await p.getByRole('button', { name: 'Projects', exact: true }).count(), 1, 'only the sidebar entry');
+    assert.equal(await p.getByText('Payment Plans', { exact: true }).count(), 0);
+  });
+  test('Partners: performance comes from real leads; pending partners can be approved', async () => {
+    await section('Partners');
+    assert.equal(await p.locator('li', { hasText: 'RERA' }).count(), 5);
+    const t = await p.locator('body').innerText();
+    assert.match(t, /Elite Realty Brokers/); assert.match(t, /\d+ leads? · \d+ bookings?/); assert.match(t, /waiting for approval/);
+    await p.getByLabel('Approve Baner Realty Hub').click(); await p.waitForTimeout(600);
+    assert.match(await p.locator('li', { hasText: 'Baner Realty Hub' }).innerText(), /Active/);
+    assert.doesNotMatch(await p.locator('body').innerText(), /waiting for approval/);
+  });
+  test('Partners: Edit works and refuses a RERA number that is already registered', async () => {
+    await p.getByLabel('Edit Elite Realty Brokers').click(); await p.waitForTimeout(300);
+    await p.getByRole('dialog').getByLabel(/Broker RERA/).fill('A51800023456');
+    await p.getByRole('dialog').getByRole('button', { name: 'Save changes' }).click(); await p.waitForTimeout(250);
+    assert.match(await p.getByRole('dialog').innerText(), /already registered/);
+    await p.keyboard.press('Escape'); await p.waitForTimeout(250);
+  });
+  test('no browser alert/confirm appeared during any of this', () => { assert.deepEqual(dialogs, []); });
+});
+
+describe('Operations: lead transfer, lead merge and distribution rules', () => {
+  let p; const H = hostFor(DEMO);
+  const mk = (id, name, ownerId, phone) => ({ id, name, avatarInitials: 'QA', lastMessage: 'Hello', time: '10:00', chatStatus: 'offline', leadStatus: 'New', read: true, messages: [{ id: id + 'm', content: 'Hello', time: '10:00', sender: 'received' }], email: id + '@qa.test', phone, initialInterest: ['2BHK'], siteVisits: [], tasks: [{ id: id + 't', leadId: id, title: 'Follow-up: Call', dueDate: '2026-10-05', priority: 'Medium', status: 'Pending', assignedTo: 'Aarav Deshmukh' }], channelSource: 'Digital Marketing', leadSource: 'Website', preferredLocation: 'Pune', propertyImages: [], ownerId, leadProject: 'The Grand Towers', leadDate: '2026-10-01', bookingStatus: 'Pending', agreementStatus: 'Drafted', possessionStatus: 'Pending' });
+  const get = async (id) => (await call('/leads/' + id, { host: H, token: await adminToken() }));
+  const sub = (n) => p.getByRole('button', { name: n, exact: true }).first();
+  before(async () => {
+    const t = await adminToken();
+    for (const l of [mk('qa-t1', 'Qa Transfer One', 'user-2', '+91 90000 00011'), mk('qa-t2', 'Qa Transfer Two', 'user-2', '+91 90000 00012'), mk('qa-d1', 'Qa Dup Person', 'user-4', '+91 90909 00001'), mk('qa-d2', 'Qa Dup Person', 'user-5', '+91 90909 00001')])
+      await call('/leads/' + l.id, { method: 'PUT', host: H, token: t, body: l });
+    p = await open(); await signIn(p);
+    await p.getByTitle('Open Admin Settings Control Panel').click(); await p.waitForTimeout(600);
+    await p.locator('aside button, nav button').filter({ hasText: /^\s*Operations\s*$/i }).first().click(); await p.waitForTimeout(500);
+  });
+  after(async () => {
+    const t = await adminToken();
+    for (const id of ['qa-t1', 'qa-t2', 'qa-d1', 'qa-d2']) await call('/leads/' + id, { method: 'DELETE', host: H, token: t });
+    await call('/distributionRules/dr-1', { method: 'PUT', host: H, token: t, body: { id: 'dr-1', name: 'Grand Towers: share between Aarav and Priya', position: 1, enabled: false, mode: 'Round robin', projects: ['The Grand Towers'], sources: [], assignees: ['user-2', 'user-3'] } });
+    await p.context().close();
+  });
+
+  test('Operations sits before Settings with Lead transfer, Lead merge and Distribution rules', async () => {
+    for (const n of ['Lead transfer', 'Lead merge', 'Distribution rules']) assert.ok(await sub(n).isVisible(), n);
+    const names = await p.locator('aside button, nav > ul > li > button').allInnerTexts();
+    const flat = names.map((x) => x.trim().toUpperCase());
+    assert.ok(flat.indexOf('OPERATIONS') > -1 && flat.indexOf('OPERATIONS') < flat.indexOf('SETTINGS'));
+  });
+  test('Lead transfer: moves the leads, their open follow-ups, and keeps a history', async () => {
+    await sub('Lead transfer').click(); await p.waitForTimeout(300);
+    await p.fill('#tr-search', 'Qa Transfer'); await p.waitForTimeout(250);
+    await p.getByLabel('Select all shown').check();
+    await p.selectOption('#tr-to', { label: 'Priya Nair' }); await p.fill('#tr-reason', 'Aarav on leave');
+    await p.getByRole('button', { name: /^Transfer 2/ }).click(); await p.waitForTimeout(300);
+    await p.getByRole('dialog').getByRole('button', { name: 'Transfer', exact: true }).click(); await p.waitForTimeout(900);
+    const a = (await get('qa-t1')).body;
+    assert.equal(a.ownerId, 'user-3'); assert.equal(a.tasks[0].assignedTo, 'Priya Nair'); assert.equal(a.customData.transferHistory[0].reason, 'Aarav on leave');
+    assert.match(await p.locator('body').innerText(), /Qa Transfer One: Aarav Deshmukh → Priya Nair/);
+  });
+  test('Lead merge: finds the same person twice and folds them into one lead', async () => {
+    await sub('Lead merge').click(); await p.waitForTimeout(400);
+    const group = p.locator('li', { hasText: 'Qa Dup Person' }).filter({ has: p.getByRole('button', { name: 'Review and merge' }) }).first();
+    assert.match(await group.innerText(), /Same mobile/i);
+    await group.getByRole('button', { name: 'Review and merge' }).click(); await p.waitForTimeout(300);
+    await p.getByRole('dialog').getByRole('button', { name: /^Merge 2 into one/ }).click(); await p.waitForTimeout(1000);
+    const left = [(await get('qa-d1')).status, (await get('qa-d2')).status].sort();
+    assert.deepEqual(left, [200, 404], 'exactly one entry is left');
+    const kept = (await get('qa-d1')).status === 200 ? (await get('qa-d1')).body : (await get('qa-d2')).body;
+    assert.equal(kept.messages.length, 2); assert.equal(kept.tasks.length, 2); assert.equal(kept.customData.mergedFrom.length, 1);
+  });
+  test('Distribution rules: switch on, "Try it" predicts, and new leads are shared round robin', async () => {
+    await sub('Distribution rules').click(); await p.waitForTimeout(400);
+    await p.getByRole('switch', { name: /Turn on Grand Towers/ }).click(); await p.waitForTimeout(600);
+    await p.selectOption('#try-project', { label: 'The Grand Towers' }); await p.waitForTimeout(200);
+    assert.match(await p.getByText(/Next lead goes to/).innerText(), /Next lead goes to Aarav Deshmukh/);
+    await p.getByRole('button', { name: 'Main App' }).click(); await p.waitForTimeout(700);
+    for (const [first, owner] of [['Qa Rr One', 'user-2'], ['Qa Rr Two', 'user-3']]) {
+      await p.getByRole('button', { name: 'New lead' }).click(); await p.waitForTimeout(300);
+      assert.equal(await p.locator('#lm-owner').inputValue(), '', 'owner starts on Auto-assign');
+      await p.fill('#lm-first', first); await p.fill('#lm-last', 'Lead'); await p.fill('#lm-phone', '+91 90000 22233'); await p.fill('#lm-email', first.replace(/ /g, '').toLowerCase() + '@qa.test');
+      await p.selectOption('#lm-project', { label: 'The Grand Towers' }); await p.locator('[role=dialog]').last().getByRole('button', { name: '2BHK', exact: true }).click();
+      await p.selectOption('#lm-loc', { index: 1 }); await p.selectOption('#lm-budget', { index: 1 }); await p.selectOption('#lm-channel', { index: 1 }); await p.selectOption('#lm-source', { index: 1 });
+      await p.locator('[role=dialog]').last().getByRole('button', { name: 'Create lead' }).click(); await p.waitForTimeout(1500);
+      const made = (await call('/leads', { host: H, token: await adminToken() })).body.find((l) => l.name === first + ' Lead');
+      assert.equal(made.ownerId, owner, first);
+      await call('/leads/' + made.id, { method: 'DELETE', host: H, token: await adminToken() });
+    }
   });
 });

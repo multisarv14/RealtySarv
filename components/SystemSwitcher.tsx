@@ -9,9 +9,11 @@ interface SystemSwitcherProps {
   currentAppView: 'main' | 'admin';
   /** Modules not included in the company's plan: shown with a lock and not clickable. */
   lockedSystems?: SystemType[];
+  /** Whether the signed-in user's role may open Admin settings. */
+  canOpenAdmin?: boolean;
 }
 
-const SystemSwitcher: React.FC<SystemSwitcherProps> = ({ activeSystem, onSwitch, onGoToAdmin, currentAppView, lockedSystems = [] }) => {
+const SystemSwitcher: React.FC<SystemSwitcherProps> = ({ activeSystem, onSwitch, onGoToAdmin, currentAppView, lockedSystems = [], canOpenAdmin = true }) => {
   const locked = (sys: SystemType) => lockedSystems.includes(sys);
   return (
     <div className="bg-[var(--dark-bg)] border-b border-[var(--light-bg)] px-3 h-10 flex items-center justify-between z-50 flex-shrink-0 shadow-lg">
@@ -75,7 +77,7 @@ const SystemSwitcher: React.FC<SystemSwitcherProps> = ({ activeSystem, onSwitch,
       </div>
 
       <div className="flex items-center gap-3">
-        {currentAppView === 'main' && (
+        {currentAppView === 'main' && canOpenAdmin && (
           <button 
             id="topbar-admin-btn"
             onClick={onGoToAdmin}
