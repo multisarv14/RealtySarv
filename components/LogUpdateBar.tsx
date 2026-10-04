@@ -111,14 +111,17 @@ const LogUpdateBar: React.FC<LogUpdateBarProps> = ({ lead, focusTaskId, preset, 
   // Fill the blanks from what we know: the customer's first name, your name, the company, the project.
   const guess = (label: string) => /customer|name$/i.test(label) && /customer/i.test(label) ? lead.name.split(' ')[0] : /your/i.test(label) ? (userName || '') : /company/i.test(label) ? (companyName || '') : /project/i.test(label) ? (lead.leadProject !== 'Not Assigned' ? lead.leadProject : '') : '';
   const pickTemplate = (id: string) => { setTplId(id); const t = templates.find(x => x.id === id); setTplParams((t?.params || []).map(guess)); };
-  const renderedTemplate = tpl ? tpl.body.replace(/\{\{(\d+)\}\}/g, (_m, n) => tplParams[Number(n) - 1] || `{{${n}}}`) : '';
+  // Blanks the app can fill itself (name, company, project, and the date and time chosen for the next follow-up) never show a box.
+  const autoParam = (label: string) => guess(label) || (/date/i.test(label) && nextDate ? friendlyDate(nextDate) : '') || (/time/i.test(label) && nextTime ? time12(nextTime) : '');
+  const effParams = (tpl?.params || []).map((label, i) => (tplParams[i] || '').trim() || autoParam(label));
+  const renderedTemplate = tpl ? tpl.body.replace(/\{\{(\d+)\}\}/g, (_m, n) => effParams[Number(n) - 1] || `{{${n}}}`) : '';
   const booked = lead.bookingStatus === 'Booked';
   const unqualified = status === 'Unqualified';
   const nextRequired = !booked && status !== 'Converted' && !unqualified;
   const wroteSomething = !!text.trim() || !!outcome || (sendMode && !!tpl);
   const errors = {
     text: wroteSomething ? '' : sendMode ? 'Write the message, or pick a template.' : 'Write what happened, or pick an outcome.',
-    template: mustUseTemplate && !tpl ? 'WhatsApp only allows an approved template now. Pick one.' : mustUseTemplate && tplParams.some(p => !p.trim()) ? 'Fill in every blank of the template.' : '',
+    template: mustUseTemplate && !tpl ? 'WhatsApp only allows an approved template now. Pick one.' : mustUseTemplate && effParams.some((p, i) => !p.trim() && /date|time/i.test(tpl!.params[i])) ? 'This template needs a date: pick the next follow-up date below.' : mustUseTemplate && effParams.some(p => !p.trim()) ? 'Fill in every blank of the template.' : '',
     next: nextRequired && !(nextDate && nextTime) ? 'Pick the date and time of the next follow-up.' : '',
     recording: recUrl && !/^(https?:\/\/|data:audio\/)/i.test(recUrl) ? 'The recording link must start with http:// or https://' : '',
   };
@@ -135,7 +138,7 @@ const LogUpdateBar: React.FC<LogUpdateBarProps> = ({ lead, focusTaskId, preset, 
     if (errors.text || errors.next || errors.recording || errors.template) { setShowErrors(true); setOpen(true); return; }
     if (sendMode && onSendWhatsApp) {
       setSending(true); setSendError('');
-      try { await onSendWhatsApp(mustUseTemplate || tpl ? { templateId: tplId, params: tplParams } : { text: text.trim() }); }
+      try { await onSendWhatsApp(mustUseTemplate || tpl ? { templateId: tplId, params: effParams } : { text: text.trim() }); }
       catch (e: any) { setSendError(e?.message || 'The message could not be sent.'); setSending(false); setOpen(true); return; }
       setSending(false);
     }
@@ -158,7 +161,7 @@ const LogUpdateBar: React.FC<LogUpdateBarProps> = ({ lead, focusTaskId, preset, 
   return (
     <div className="border-t border-[var(--border-color)] bg-[var(--medium-bg)] flex-shrink-0" data-testid="log-update">
       {open && (
-        <div className="px-3 py-2 flex flex-wrap lg:flex-nowrap items-center gap-x-2 gap-y-2 border-b border-[var(--border-color)] animate-fadeIn max-h-[40vh] overflow-y-auto [&_input]:!h-8 [&_select]:!h-8 [&_input]:!text-xs [&_select]:!text-xs [&_[role=radio]]:!h-7 [&_[role=radio]]:!px-2.5">
+        <div className="px-3 py-2 flex flex-wrap items-center gap-x-2 gap-y-2 border-b border-[var(--border-color)] animate-fadeIn max-h-[40vh] overflow-y-auto overflow-x-hidden [&_input]:!h-8 [&_select]:!h-8 [&_input]:!text-xs [&_select]:!text-xs [&_[role=radio]]:!h-7 [&_[role=radio]]:!px-2.5">
           {kind !== 'note' && !sendMode && (
             <div>
               <select aria-label="Outcome" value={outcome} onChange={e => setOutcome(e.target.value)} className={`${inputCls()} !w-auto`}><option value="">How did it go?</option>{OUTCOMES.map(o => <option key={o}>{o}</option>)}</select>
@@ -176,9 +179,9 @@ const LogUpdateBar: React.FC<LogUpdateBarProps> = ({ lead, focusTaskId, preset, 
                   {tpl && (
                     <div className="contents">
                       {tpl.params.map((label, i) => (
-                        guess(label) ? null : <input key={i} aria-label={label} placeholder={label} value={tplParams[i] || ''} onChange={e => setTplParams(p => p.map((v, j) => (j === i ? e.target.value : v)))} className={inputCls(showErrors && !(tplParams[i] || '').trim())} />
+                        autoParam(label) || /date|time/i.test(label) ? null : <input key={i} aria-label={label} placeholder={label} value={tplParams[i] || ''} onChange={e => setTplParams(p => p.map((v, j) => (j === i ? e.target.value : v)))} className={inputCls(showErrors && !(tplParams[i] || '').trim())} />
                       ))}
-                      <p className="basis-full order-last text-xs text-[var(--text-secondary)] bg-[var(--dark-bg)] rounded-lg p-2.5 border border-[var(--border-color)]" data-testid="wa-preview">{renderedTemplate}</p>
+                      <p className="basis-full text-xs text-[var(--text-secondary)] bg-[var(--dark-bg)] rounded-lg p-2.5 border border-[var(--border-color)]" data-testid="wa-preview">{renderedTemplate}</p>
                     </div>
                   )}
                 </div>
@@ -210,6 +213,7 @@ const LogUpdateBar: React.FC<LogUpdateBarProps> = ({ lead, focusTaskId, preset, 
               {(recError || (showErrors && errors.recording)) && <p role="alert" className="mt-1 text-xs text-red-500">{recError || errors.recording}</p>}
             </div>
           )}
+          <div className="basis-full h-0" aria-hidden="true"></div>
           <div className="contents">
             <div className="flex items-center gap-1.5">
               <label htmlFor="log-status" className="text-[11px] font-semibold text-[var(--text-secondary)]">Status</label>
@@ -228,7 +232,7 @@ const LogUpdateBar: React.FC<LogUpdateBarProps> = ({ lead, focusTaskId, preset, 
             <p className="text-xs text-[var(--text-secondary)]"><i className="fas fa-info-circle mr-1.5" aria-hidden="true"></i>No next follow-up is needed for an unqualified lead. Any follow-up still open for this lead will be closed.</p>
           ) : (
           <div className="lg:flex-1 min-w-0">
-            <div className="flex flex-wrap lg:flex-nowrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="text-[11px] font-semibold text-[var(--text-secondary)] whitespace-nowrap" title="Next follow-up">Next{nextRequired ? <span className="text-red-500"> *</span> : <span className="font-normal"> (opt.)</span>}</span>
               <select aria-label="Quick date" value={quickValue} onChange={e => e.target.value && pickQuick(e.target.value)} className={`${inputCls()} !w-auto`}><option value="">Pick a day</option>{QUICK.map(q => <option key={q[0]}>{q[0]}</option>)}</select>
               <input type="date" aria-label="Next follow-up date" min={todayISO()} value={nextDate} onChange={e => setNextDate(e.target.value)} className={`${inputCls(showErrors && !!errors.next && !nextDate)} !w-auto`} />
