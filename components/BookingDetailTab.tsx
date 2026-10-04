@@ -1,10 +1,11 @@
 
 import React from 'react';
-import { Lead, Project, PaymentPlan, BookingDetails } from '../types';
+import { User, Lead, Project, PaymentPlan, BookingDetails } from '../types';
 import UnitDocumentViewerModal from './modals/UnitDocumentViewerModal';
 
 interface BookingDetailTabProps {
   lead: Lead;
+  users?: User[];
   project: Project | null;
   paymentPlans: PaymentPlan[];
   onStartBooking: () => void;
@@ -12,7 +13,7 @@ interface BookingDetailTabProps {
   onUpdateBooking: (leadId: string, bookingDetails: BookingDetails) => void;
 }
 
-const BookingDetailTab: React.FC<BookingDetailTabProps> = ({ lead, project, paymentPlans, onStartBooking, onEditBooking }) => {
+const BookingDetailTab: React.FC<BookingDetailTabProps> = ({ lead, users = [], project, paymentPlans, onStartBooking, onEditBooking }) => {
   const [viewingDoc, setViewingDoc] = React.useState<{ type: 'Payment Receipt' | 'Demand Letter', data: any } | null>(null);
 
   if (lead.bookingStatus !== 'Booked' || !lead.bookingDetails) {
@@ -83,8 +84,12 @@ const BookingDetailTab: React.FC<BookingDetailTabProps> = ({ lead, project, paym
                   <p className="font-bold text-sm text-[var(--text-primary)]">{plan?.name || 'Custom Plan'}</p>
               </div>
               <div>
-                  <p className="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider mb-1">Creation Date</p>
-                  <p className="font-bold text-sm text-[var(--text-primary)]">{tokenDetails.transactionDate}</p>
+                  <p className="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider mb-1">Booking Date</p>
+                  <p className="font-bold text-sm text-[var(--text-primary)]">{lead.bookingDetails.bookingDate || tokenDetails.transactionDate}</p>
+              </div>
+              <div>
+                  <p className="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider mb-1">Sales Executive</p>
+                  <p className="font-bold text-sm text-[var(--text-primary)]" data-testid="sales-executive">{users.find(u => u.id === (lead.bookingDetails.salesExecutiveId || lead.ownerId))?.name || 'Not set'}</p>
               </div>
           </div>
       </div>

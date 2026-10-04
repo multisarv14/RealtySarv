@@ -21,7 +21,30 @@ interface UnitConfig {
     count: string;
     bedrooms: string;
     bathrooms: string;
+    /** Which floors this type is on, e.g. "G", "1-5" or "2,4". Empty means every floor in the range. */
+    floors: string;
 }
+
+const ground = (t: string) => /^(g|ground)$/i.test(t.trim()) ? 0 : parseInt(t, 10);
+/** Turns "G, 1-3, 5" into a test for a floor number. Returns null when the text cannot be read. */
+const floorScope = (text: string): ((floor: number) => boolean) | null => {
+    if (!text.trim()) return () => true;
+    const parts = text.split(',').map(x => x.trim()).filter(Boolean);
+    const tests: Array<(f: number) => boolean> = [];
+    for (const part of parts) {
+        const m = part.match(/^(-?\d+|g|ground)(?:\s*-\s*(-?\d+|g|ground))?$/i);
+        if (!m) return null;
+        const a = ground(m[1]); const b = m[2] !== undefined ? ground(m[2]) : a;
+        if (isNaN(a) || isNaN(b) || a > b) return null;
+        tests.push(f => f >= a && f <= b);
+    }
+    return f => tests.some(t => t(f));
+};
+const floorsToText = (floors: number[]): string => {
+    const sorted = [...new Set(floors)].sort((a, b) => a - b); const label = (f: number) => (f === 0 ? 'G' : String(f)); const out: string[] = [];
+    for (let i = 0; i < sorted.length;) { let j = i; while (j + 1 < sorted.length && sorted[j + 1] === sorted[j] + 1) j++; out.push(j > i ? `${label(sorted[i])}-${label(sorted[j])}` : label(sorted[i])); i = j + 1; }
+    return out.join(', ');
+};
 
 const GenerateInventoryModal: React.FC<GenerateInventoryModalProps> = ({ isOpen, onClose, project, onGenerate, initialWing }) => {
     const [selectedWing, setSelectedWing] = React.useState<string>('');
@@ -29,7 +52,7 @@ const GenerateInventoryModal: React.FC<GenerateInventoryModalProps> = ({ isOpen,
     const [toFloor, setToFloor] = React.useState(project.totalFloors.toString());
     const [unitNumberSuffixStart, setUnitNumberSuffixStart] = React.useState('01');
     const [unitConfigs, setUnitConfigs] = React.useState<UnitConfig[]>([
-        { id: uuidv4(), typeName: '2BHK', carpetArea: '800', saleableArea: '1200', price: '5000000', count: '4', bedrooms: '2', bathrooms: '2' }
+        { id: uuidv4(), typeName: '2BHK', carpetArea: '800', saleableArea: '1200', price: '5000000', count: '4', bedrooms: '2', bathrooms: '2', floors: '' }
     ]);
     const [error, setError] = React.useState<string | null>(null);
 
@@ -52,50 +75,32 @@ const GenerateInventoryModal: React.FC<GenerateInventoryModalProps> = ({ isOpen,
                     setFromFloor(minFloor.toString());
                     setToFloor(maxFloor.toString());
                     
-                    // Infer unit configs from the lowest floor of this wing
-                    const sampleFloor = minFloor;
-                    const sampleUnits = wingUnits.filter(u => u.floor === sampleFloor);
-                    
-                    // Group by unique characteristics to rebuild UnitConfig rows
-                    const groups: Record<string, UnitConfig> = {};
-                    
-                    sampleUnits.forEach(unit => {
-                        // Key based on properties that define a "Configuration"
-                        // Use strict fallbacks to avoid 'undefined' in key
-                        const type = unit.type || 'Unknown';
-                        const area = unit.area || 0;
-                        const price = unit.price || 0;
-                        
+                    // Rebuild the unit types of the whole wing, with the floors each one is on.
+                    const groups: Record<string, UnitConfig & { onFloors: number[]; perFloor: Record<number, number> }> = {};
+                    wingUnits.forEach(unit => {
+                        const type = unit.type || 'Unknown'; const area = unit.area || 0; const price = unit.price || 0;
                         const key = `${type}-${area}-${price}`;
-                        
-                        if (!groups[key]) {
-                            groups[key] = {
-                                id: uuidv4(),
-                                typeName: type,
-                                saleableArea: area.toString(),
-                                carpetArea: (unit.carpetArea || 0).toString(),
-                                price: price.toString(),
-                                count: '0',
-                                bedrooms: (unit.bedrooms || 0).toString(),
-                                bathrooms: (unit.bathrooms || 0).toString(),
-                            };
-                        }
-                        // Increment count safely
-                        const currentCount = parseInt(groups[key].count || '0', 10);
-                        groups[key].count = (currentCount + 1).toString();
+                        if (!groups[key]) groups[key] = { id: uuidv4(), typeName: type, saleableArea: area.toString(), carpetArea: (unit.carpetArea || 0).toString(), price: price.toString(), count: '0', bedrooms: (unit.bedrooms || 0).toString(), bathrooms: (unit.bathrooms || 0).toString(), floors: '', onFloors: [], perFloor: {} };
+                        groups[key].onFloors.push(unit.floor);
+                        groups[key].perFloor[unit.floor] = (groups[key].perFloor[unit.floor] || 0) + 1;
                     });
-                    
+                    const allFloors = new Set(floors);
+                    Object.values(groups).forEach(g => {
+                        g.count = String(Math.max(...Object.values(g.perFloor)));
+                        const on = new Set(g.onFloors);
+                        g.floors = on.size === allFloors.size ? '' : floorsToText(g.onFloors);
+                    });
                     if (Object.keys(groups).length > 0) {
-                        setUnitConfigs(Object.values(groups));
+                        setUnitConfigs(Object.values(groups).map(({ onFloors, perFloor, ...c }) => c));
                     } else {
                         // Fallback if sample floor was empty
-                         setUnitConfigs([{ id: uuidv4(), typeName: '2BHK', carpetArea: '800', saleableArea: '1200', price: '5000000', count: '4', bedrooms: '2', bathrooms: '2' }]);
+                         setUnitConfigs([{ id: uuidv4(), typeName: '2BHK', carpetArea: '800', saleableArea: '1200', price: '5000000', count: '4', bedrooms: '2', bathrooms: '2', floors: '' }]);
                     }
                 } else {
                      // Wing exists in project definition but has no inventory yet
                      setFromFloor('1');
                      setToFloor(project.totalFloors.toString());
-                     setUnitConfigs([{ id: uuidv4(), typeName: '2BHK', carpetArea: '800', saleableArea: '1200', price: '5000000', count: '4', bedrooms: '2', bathrooms: '2' }]);
+                     setUnitConfigs([{ id: uuidv4(), typeName: '2BHK', carpetArea: '800', saleableArea: '1200', price: '5000000', count: '4', bedrooms: '2', bathrooms: '2', floors: '' }]);
                 }
 
             } else {
@@ -105,7 +110,7 @@ const GenerateInventoryModal: React.FC<GenerateInventoryModalProps> = ({ isOpen,
                 setToFloor(project.totalFloors.toString());
                 setUnitNumberSuffixStart('01');
                 setUnitConfigs([
-                    { id: uuidv4(), typeName: '2BHK', carpetArea: '800', saleableArea: '1200', price: '5000000', count: '4', bedrooms: '2', bathrooms: '2' }
+                    { id: uuidv4(), typeName: '2BHK', carpetArea: '800', saleableArea: '1200', price: '5000000', count: '4', bedrooms: '2', bathrooms: '2', floors: '' }
                 ]);
             }
             setError(null);
@@ -113,27 +118,27 @@ const GenerateInventoryModal: React.FC<GenerateInventoryModalProps> = ({ isOpen,
     }, [isOpen, project, hasWings, initialWing, safeInventory]);
 
 
-    const totalUnitsPerFloorPerWing = React.useMemo(() => 
-        unitConfigs.reduce((sum, config) => sum + (parseInt(config.count, 10) || 0), 0),
+    const unitsOnFloor = React.useCallback((floor: number) => unitConfigs.reduce((sum, config) => (floorScope(config.floors)?.(floor) ? sum + (parseInt(config.count, 10) || 0) : sum), 0), [unitConfigs]);
+    const totalUnitsPerFloorPerWing = React.useMemo(() =>
+        unitConfigs.reduce((sum, config) => (config.floors.trim() ? sum : sum + (parseInt(config.count, 10) || 0)), 0),
     [unitConfigs]);
     
     const totalUnitsToGenerate = React.useMemo(() => {
         const from = parseInt(fromFloor, 10) || 0;
         const to = parseInt(toFloor, 10) || 0;
         if (from > to) return 0;
-        const numFloors = to - from + 1;
-        
+        let perWing = 0;
+        for (let f = from; f <= to && f - from < 500; f++) perWing += unitsOnFloor(f);
         const numWings = (selectedWing === 'All' && hasWings) ? project.wings!.length : 1;
-        
-        return numFloors * numWings * totalUnitsPerFloorPerWing;
-    }, [fromFloor, toFloor, totalUnitsPerFloorPerWing, project.wings, selectedWing, hasWings]);
+        return perWing * numWings;
+    }, [fromFloor, toFloor, unitsOnFloor, project.wings, selectedWing, hasWings]);
 
     const handleConfigChange = (id: string, field: keyof UnitConfig, value: string) => {
         setUnitConfigs(prev => prev.map(config => config.id === id ? { ...config, [field]: value } : config));
     };
     
     const addUnitConfig = () => {
-        setUnitConfigs(prev => [...prev, { id: uuidv4(), typeName: '', carpetArea: '', saleableArea: '', price: '', count: '0', bedrooms: '', bathrooms: '' }]);
+        setUnitConfigs(prev => [...prev, { id: uuidv4(), typeName: '', carpetArea: '', saleableArea: '', price: '', count: '0', bedrooms: '', bathrooms: '', floors: '' }]);
     };
     
     const removeUnitConfig = (id: string) => {
@@ -198,6 +203,16 @@ const GenerateInventoryModal: React.FC<GenerateInventoryModalProps> = ({ isOpen,
             const price = parseFloat(config.price);
             const area = parseFloat(config.saleableArea);
 
+            const scope = floorScope(config.floors);
+            if (!scope) {
+                setError(`Floors for ${config.typeName} can be written like G, 1-5 or 2,4.`);
+                return;
+            }
+            let anyFloor = false; for (let f = from; f <= to; f++) if (scope(f)) { anyFloor = true; break; }
+            if (!anyFloor) {
+                setError(`${config.typeName} is set for floors ${config.floors}, which are outside ${from} to ${to}.`);
+                return;
+            }
             if (isNaN(count) || count < 0) {
                 setError(`Invalid count for ${config.typeName || 'unit'}. Must be 0 or more.`);
                 return;
@@ -256,12 +271,12 @@ const GenerateInventoryModal: React.FC<GenerateInventoryModalProps> = ({ isOpen,
         for (let floor = from; floor <= to; floor++) {
             for (const wing of targetWings) {
                 let unitIndexOnFloorForWing = 0;
-                for (const config of unitConfigs) {
+                for (const config of unitConfigs.filter(c => floorScope(c.floors)!(floor))) {
                     const numUnits = parseInt(config.count, 10);
                     for (let i = 0; i < numUnits; i++) {
                         const suffix = (startSuffix + unitIndexOnFloorForWing).toString().padStart(unitNumberSuffixStart.length, '0');
                         // Only add wing prefix if there are wings and the wing name isn't empty
-                        const unitNumber = (wing && hasWings) ? `${wing.toUpperCase()}-${floor}${suffix}` : `${floor}${suffix}`;
+                        const unitNumber = (wing && hasWings) ? `${wing.toUpperCase()}-${floor === 0 ? 'G' : floor}${suffix}` : `${floor === 0 ? 'G' : floor}${suffix}`;
                         
                         const newUnit: InventoryUnit = {
                             id: uuidv4(),
@@ -400,7 +415,7 @@ const GenerateInventoryModal: React.FC<GenerateInventoryModalProps> = ({ isOpen,
                                             <button type="button" onClick={() => moveConfig(config.id, 'down')} disabled={index === unitConfigs.length - 1} className="p-1 text-xs rounded disabled:opacity-30 disabled:cursor-not-allowed hover:bg-[var(--light-bg)]"><i className="fas fa-chevron-down"></i></button>
                                         </div>
                                         <div className="flex-1 p-3 bg-[var(--dark-bg)] rounded-md border border-transparent relative">
-                                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-7 gap-3">
+                                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-8 gap-3">
                                                 <div className="col-span-1 sm:col-span-1">
                                                     <label className="block text-xs text-gray-400 mb-1">Type Name*</label>
                                                     <input type="text" value={config.typeName} onChange={e => handleConfigChange(config.id, 'typeName', e.target.value)} className="w-full p-2 rounded-md border border-[var(--light-bg)] bg-[var(--medium-bg)] text-xs" />
@@ -426,6 +441,10 @@ const GenerateInventoryModal: React.FC<GenerateInventoryModalProps> = ({ isOpen,
                                                     <input type="number" value={config.bathrooms} onChange={e => handleConfigChange(config.id, 'bathrooms', e.target.value)} className="w-full p-2 rounded-md border border-[var(--light-bg)] bg-[var(--medium-bg)] text-xs" />
                                                 </div>
                                                 <div>
+                                                    <label className="block text-xs text-gray-400 mb-1" title="Leave empty for every floor. Examples: G, 1-5, 2,4">Floors</label>
+                                                    <input type="text" aria-label="Floors" placeholder="All" value={config.floors} onChange={e => handleConfigChange(config.id, 'floors', e.target.value)} className="w-full p-2 rounded-md border border-[var(--light-bg)] bg-[var(--medium-bg)] text-xs" />
+                                                </div>
+                                                <div>
                                                     <label className="block text-xs text-gray-400 mb-1">Count*</label>
                                                     <input type="number" value={config.count} onChange={e => handleConfigChange(config.id, 'count', e.target.value)} className="w-full p-2 rounded-md border border-[var(--light-bg)] bg-[var(--medium-bg)] text-xs" />
                                                 </div>
@@ -437,7 +456,7 @@ const GenerateInventoryModal: React.FC<GenerateInventoryModalProps> = ({ isOpen,
                                 <button type="button" onClick={addUnitConfig} className="text-sm px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white">+ Add Unit Type</button>
                             </div>
                              <div className="mt-4 text-sm font-semibold p-2 rounded-md bg-blue-600/20 text-blue-400">
-                                <span>Total Units Configured per Floor: {totalUnitsPerFloorPerWing}</span>
+                                <span>Units on every floor: {totalUnitsPerFloorPerWing}{unitConfigs.some(c => c.floors.trim()) ? ' (plus the types limited to some floors)' : ''}. Tip: type G in Floors for a ground-floor-only type, and set From Floor to 0.</span>
                             </div>
                         </fieldset>
                     </div>

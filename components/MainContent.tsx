@@ -7,7 +7,7 @@ import BookingDetailTab from './BookingDetailTab';
 import LedgerTab from './LedgerTab';
 import DocumentHub from './DocumentHub';
 import { v4 as uuidv4 } from 'uuid';
-import { PIPELINE_STEPS, buildTimeline, callNumber, customerCode, friendlyDate, getPipelineStep, leadCode, leadSummary, openWhatsApp, time12, todayISO } from './leadUi';
+import { PIPELINE_STEPS, buildTimeline, callNumber, customerCode, friendlyDate, getFlowAction, getNextAction, getPipelineStep, urgencyClass, leadCode, leadSummary, openWhatsApp, time12, todayISO } from './leadUi';
 import { toast } from './ui/Toast';
 import LogUpdateBar, { LogUpdatePayload } from './LogUpdateBar';
 import CallBar from './CallBar';
@@ -243,7 +243,7 @@ const MainContent: React.FC<MainContentProps> = ({
     
     if (activeContentTab === 'booking') {
         const projectForLead = (projects || []).find(p => p.name === selectedLead.leadProject);
-        return <BookingDetailTab lead={selectedLead} project={projectForLead || null} paymentPlans={paymentPlans} onStartBooking={() => onToggleBookingModal(selectedLead.id)} onEditBooking={() => onToggleEditBookingModal(selectedLead.id)} onUpdateBooking={(leadId, details) => onUpdateBooking(leadId, details, false)} />;
+        return <BookingDetailTab users={users} lead={selectedLead} project={projectForLead || null} paymentPlans={paymentPlans} onStartBooking={() => onToggleBookingModal(selectedLead.id)} onEditBooking={() => onToggleEditBookingModal(selectedLead.id)} onUpdateBooking={(leadId, details) => onUpdateBooking(leadId, details, false)} />;
     }
 
     if (activeContentTab === 'ledger') {
@@ -292,7 +292,8 @@ const MainContent: React.FC<MainContentProps> = ({
           <div className="min-w-0">
             <div className="flex items-center gap-2 min-w-0">
               <span className="text-[var(--text-primary)] font-bold text-sm leading-tight truncate">{selectedLead.name}</span>
-              <span className="shrink-0 px-1.5 py-px rounded-full text-[10px] font-semibold bg-[var(--primary-color)]/15 text-[var(--primary-color)]" title="Where this lead is in the sales journey">{PIPELINE_STEPS[step]}</span>
+              <span className="shrink-0 px-1.5 py-px rounded-full text-[10px] font-semibold bg-[var(--primary-color)]/15 text-[var(--primary-color)]" title="Where this lead is in the sales journey, and what comes next" data-testid="lead-flow">{PIPELINE_STEPS[step]}{step < PIPELINE_STEPS.length - 1 && <> <i className="fas fa-arrow-right text-[8px] mx-0.5" aria-hidden="true"></i> {getFlowAction(selectedLead)}</>}</span>
+              {(() => { const due = getNextAction(selectedLead); return due ? <span data-testid="lead-due" title="The next follow-up or visit that is due" className={`hidden sm:inline shrink-0 px-1.5 py-px rounded-full border text-[10px] font-semibold ${urgencyClass[due.urgency]}`}>Due: {due.label}</span> : null; })()}
             </div>
             <div className="text-[11.5px] text-[var(--text-secondary)] truncate" data-testid="lead-facts">
               {[selectedLead.leadProject && selectedLead.leadProject !== 'Not Assigned' ? selectedLead.leadProject : 'No project', [selectedLead.channelSource, selectedLead.leadSource].filter(Boolean).join(' › '), `Owner ${users.find(u => u.id === selectedLead.ownerId)?.name || 'unassigned'}`].filter(Boolean).join(' · ')}

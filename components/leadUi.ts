@@ -56,6 +56,21 @@ export function getPipelineStep(lead: Lead): number {
   return 0;
 }
 
+/** What has to happen next in the sales flow, in a few words: "Schedule site visit", "Site visit pending", "Collect token"… */
+export function getFlowAction(lead: Lead): string {
+  const step = getPipelineStep(lead);
+  if (step === 0) return (lead.siteVisits || []).some((v) => v.status === 'Visit Scheduled') ? 'Site visit pending' : 'Schedule site visit';
+  if (step === 1) return 'Collect token';
+  if (step === 2) return 'Book the unit';
+  if (step === 3 || step === 4) {
+    if (lead.agreementStatus === 'Drafted') return 'Agreement signature';
+    if (lead.agreementStatus === 'Signature') return 'ATS';
+    if (lead.agreementStatus === 'ATS') return 'Register agreement';
+    return lead.possessionStatus === 'Scheduled' ? 'Hand over possession' : 'Schedule possession';
+  }
+  return 'Completed';
+}
+
 /** Digits only, for tel: and wa.me links. Bare 10-digit Indian numbers get the 91 country code for WhatsApp. */
 export function phoneForWhatsApp(phone: string): string {
   const d = (phone || '').replace(/\D/g, '');

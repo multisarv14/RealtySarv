@@ -494,7 +494,7 @@ const MainAppContainer: React.FC<MainAppContainerProps> = ({
         projectNames={projects.map(p => p.name)}
       />
       <FollowUpModal isOpen={showFollowUpModal} onClose={() => setShowFollowUpModal(false)} onAddFollowUp={handleAddFollowUp} users={users} context={followUpContext} leadName={selectedLead?.name} defaultAssignee={currentUser?.name} />
-      <BookingModal isOpen={showBookingModal} onClose={handleCloseBookingModal} onConfirmBooking={handleConfirmBooking} onUpdateBooking={handleUpdateBooking} lead={bookingLead} bookingToEdit={isEditingBooking ? bookingLead?.bookingDetails : null} project={bookingProject} paymentPlans={paymentPlans} financialSettings={financialSettings} formConfigs={formConfigs} />
+      <BookingModal isOpen={showBookingModal} onClose={handleCloseBookingModal} onConfirmBooking={handleConfirmBooking} onUpdateBooking={handleUpdateBooking} lead={bookingLead} bookingToEdit={isEditingBooking ? bookingLead?.bookingDetails : null} project={bookingProject} paymentPlans={paymentPlans} financialSettings={financialSettings} formConfigs={formConfigs} users={users} />
       <TokenEntryModal isOpen={showTokenEntryModal} onClose={() => setShowTokenEntryModal(false)} onConfirmToken={handleConfirmToken} lead={tokenEntryLead} />
       
       {atsActiveLead && (

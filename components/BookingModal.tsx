@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Lead, Project, InventoryUnit, ParkingSlot, BookingDetails, Applicant, PaymentPlan, FinancialSettings, CalculationBasis, ConditionalFinancialRule, OtherChargeSetting, OtherChargeBasis, PriceBreakup, FormFieldConfig } from '../types';
+import { User, Lead, Project, InventoryUnit, ParkingSlot, BookingDetails, Applicant, PaymentPlan, FinancialSettings, CalculationBasis, ConditionalFinancialRule, OtherChargeSetting, OtherChargeBasis, PriceBreakup, FormFieldConfig } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 import { defaultCustomerDocs } from '../constants';
 import DynamicFieldRenderer from './DynamicFieldRenderer';
@@ -17,6 +17,7 @@ interface BookingModalProps {
   paymentPlans: PaymentPlan[];
   financialSettings: FinancialSettings;
   formConfigs: FormFieldConfig[];
+  users?: User[];
 }
 
 const FormField: React.FC<{label: string, id: string, value: string, onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => void, type?: string, required?: boolean, disabled?: boolean, children?: React.ReactNode}> =
@@ -162,7 +163,7 @@ const ApplicantForm: React.FC<{
 );
 
 
-const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onConfirmBooking, onUpdateBooking, lead, bookingToEdit, project, paymentPlans, financialSettings, formConfigs }) => {
+const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onConfirmBooking, onUpdateBooking, lead, bookingToEdit, project, paymentPlans, financialSettings, formConfigs, users = [] }) => {
     const [currentStep, setCurrentStep] = React.useState(0);
     const [bookingData, setBookingData] = React.useState<BookingDetails | null>(null);
     const [selectedUnit, setSelectedUnit] = React.useState<InventoryUnit | null>(null);
@@ -355,7 +356,8 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onConfirmB
         const bookingId = isEditing ? bookingToEdit?.primaryApplicant?.id : 'new';
         if (isOpen && lead && project && (!hasInitialized.current || lastBookingId.current !== bookingId)) {
             if (isEditing && bookingToEdit) {
-                setBookingData(bookingToEdit);
+                // Bookings made before these two fields existed: the token date and the lead's owner.
+                setBookingData({ ...bookingToEdit, bookingDate: bookingToEdit.bookingDate || bookingToEdit.tokenDetails?.transactionDate || new Date().toISOString().split('T')[0], salesExecutiveId: bookingToEdit.salesExecutiveId || lead.ownerId });
             } else {
                 const initialBookingData: BookingDetails = {
                     primaryApplicant: {
@@ -400,6 +402,9 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onConfirmB
                         transactionDate: new Date().toISOString().split('T')[0],
                     },
                     declarationAccepted: false,
+                    bookingDate: new Date().toISOString().split('T')[0],
+                    // The person who owns the lead (and so took the site visit) is the sales executive unless it is changed here.
+                    salesExecutiveId: lead.ownerId,
                     customData: {},
                 };
                 setBookingData(initialBookingData);
@@ -636,6 +641,15 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onConfirmB
                     
                     {steps[currentStep] === 'property' && (
                         <div className="space-y-4">
+                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <FormField label="Booking Date" id="bookingDate" value={bookingData.bookingDate || ''} onChange={e => handleSimpleChange('bookingDate', e.target.value)} type="date" required />
+                                <FormField label="Sales Executive" id="salesExecutiveId" value={bookingData.salesExecutiveId || ''} onChange={e => handleSimpleChange('salesExecutiveId', e.target.value)} required>
+                                    <select id="salesExecutiveId" name="salesExecutiveId" value={bookingData.salesExecutiveId || ''} onChange={e => handleSimpleChange('salesExecutiveId', e.target.value)} required className={inputCls()}>
+                                        <option value="" disabled>-- Choose --</option>
+                                        {users.filter(u => u.isActive || u.id === bookingData.salesExecutiveId).map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                                    </select>
+                                </FormField>
+                             </div>
                              <FormField label="Select Unit" id="unitId" value={bookingData.unitId} onChange={e => handleSimpleChange('unitId', e.target.value)} required>
                                 <select id="unitId" name="unitId" value={bookingData.unitId} onChange={e => handleSimpleChange('unitId', e.target.value)} required className={inputCls()}>
                                     <option value="" disabled>-- Choose a unit --</option>

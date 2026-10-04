@@ -504,7 +504,10 @@ const DocumentHub: React.FC<DocumentHubProps> = ({ lead, project, onUpdateApplic
     { key: 'Project Documents', label: 'Project Documents', icon: 'fas fa-building-flag' },
   ];
 
-  const currentTab = (activeTab as DocHubTab) || 'Customer KYC';
+  // Customer KYC and Unit documents belong to a booking: before it, the lead only has the project's documents.
+  const booked = lead.bookingStatus === 'Booked' && !!lead.bookingDetails;
+  const visibleTabs = booked ? tabs : tabs.filter(t => t.key === 'Project Documents');
+  const currentTab: DocHubTab = booked ? ((activeTab as DocHubTab) || 'Customer KYC') : 'Project Documents';
 
   const renderContent = () => {
     switch (currentTab) {
@@ -522,7 +525,7 @@ const DocumentHub: React.FC<DocumentHubProps> = ({ lead, project, onUpdateApplic
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-[var(--medium-bg)]">
         <div role="tablist" className="flex items-center gap-1.5 px-4 py-2.5 md:py-0 md:h-[52px] border-b border-[var(--light-bg)] flex-shrink-0 bg-[var(--dark-bg)] overflow-x-auto no-scrollbar">
-            {tabs.map(tab => (
+            {visibleTabs.map(tab => (
                 <button key={tab.key} role="tab" aria-selected={currentTab === tab.key} onClick={() => setActiveTab?.(tab.key)}
                     className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors ${currentTab === tab.key ? 'bg-[var(--primary-color)] text-white shadow-sm' : 'bg-[var(--medium-bg)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--light-bg)]'}`}>
                     <i className={tab.icon} aria-hidden="true"></i>

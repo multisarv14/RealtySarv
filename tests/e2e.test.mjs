@@ -241,6 +241,20 @@ describe('CRM: lists, groups, agenda and privacy (read-only)', () => {
     assert.match(proj, /RERA certificate/); assert.match(proj, /RERA number/); assert.match(proj, /Not added/, 'what the project does not have is not offered as a button');
     assert.equal(await p.getByTestId('project-documents').getByRole('button', { name: /view/i }).count() <= 1, true, 'only documents that exist can be opened');
   });
+  test('Before a booking: Files shows only the project documents, and the header says where the lead is and what is due', async () => {
+    const lead = (await apiLeads()).find((l) => l.bookingStatus !== 'Booked' && !(l.siteVisits || []).length && !l.tokenAmount && (l.tasks || []).some((t) => t.status === 'Pending' && t.title.startsWith('Follow-up:')) && !/Test|Qa/.test(l.name));
+    await menu(p, MENU.leads); await tab(p, 'Follow-up');
+    await p.getByLabel('Search leads').fill(lead.name); await p.waitForTimeout(400);
+    await p.locator('[role=button][tabindex="0"]').first().click(); await p.waitForTimeout(500);
+    assert.match(await p.getByTestId('lead-flow').innerText(), /Lead\s*Schedule site visit/, 'a new lead shows its stage and the next step');
+    assert.match(await p.getByTestId('lead-due').innerText(), /Due: Follow-up/, 'and what is due next');
+    await tab(p, 'Files'); await p.waitForTimeout(300);
+    assert.equal(await p.getByRole('tab', { name: 'Customer KYC', exact: true }).count(), 0, 'KYC waits for the booking');
+    assert.equal(await p.getByRole('tab', { name: 'Unit documents', exact: true }).count(), 0, 'unit documents wait for the booking');
+    assert.ok(await p.getByTestId('project-documents').isVisible(), 'the project documents are there');
+    await tab(p, 'Activity');
+    await p.getByLabel('Search leads').fill(''); await p.waitForTimeout(300);
+  });
   test('Visits / Booking / Agreement / Possession are all populated', async () => {
     await menu(p, MENU.visits);
     for (const [t, n] of [['Scheduled', 10], ['Pending', 10], ['Completed', 10]]) { await tab(p, t); assert.equal(await rows(p), n, `visits ${t}`); }
@@ -305,7 +319,7 @@ describe('CRM: lists, groups, agenda and privacy (read-only)', () => {
   });
   test('lead view: stage chip, five tabs, search finds by name', async () => {
     await menu(p, MENU.leads); await tab(p, 'Active'); await p.locator('[role=button][tabindex="0"]').first().click(); await p.waitForTimeout(300);
-    assert.ok((await p.locator('span[title="Where this lead is in the sales journey"]').innerText()).length > 0);
+    assert.ok((await p.getByTestId('lead-flow').innerText()).length > 0);
     assert.deepEqual((await p.locator('[role=tab]').allInnerTexts()).slice(3).map((s) => s.trim()), ['Activity', 'Timeline', 'Details', 'Booking', 'Files']);
     await p.getByLabel('Search leads').fill('Aarav Sharma'); await p.waitForTimeout(400); assert.ok((await rows(p)) >= 1); await p.getByLabel('Search leads').fill('');
   });
@@ -492,6 +506,10 @@ describe('CRM: forms and popups (these change data)', () => {
     assert.equal(await dlg().locator('input[id^=mobile-]').first().getAttribute('type'), 'password', 'mobile shown as dots');
     await p.getByLabel(/same as present/i).check().catch(() => {}); await next(); assert.match(await step(), /Property/);
     await next(); assert.match(await step(), /Property/, 'unit and parking are required');
+    const leadBefore = await find(name);
+    assert.equal(await dlg().locator('#bookingDate').inputValue(), new Date().toISOString().split('T')[0], 'booking date starts today');
+    assert.equal(await dlg().locator('#salesExecutiveId').inputValue(), leadBefore.ownerId, 'the sales executive starts as the lead owner (who took the site visit)');
+    await dlg().locator('#bookingDate').fill('2026-10-01');
     await p.selectOption('#unitId', { index: 1 }); await p.selectOption('#parkingId', { index: 1 });
     const unitId = await p.inputValue('#unitId'); await next(); assert.match(await step(), /Cost/);
     await dlg().getByLabel(/Amount \(INR\)/).fill('100000'); await dlg().locator('#transactionId').fill('TXN12345'); const bank = dlg().locator('#bankName'); if (await bank.count()) await bank.fill('HDFC Bank');
@@ -499,6 +517,7 @@ describe('CRM: forms and popups (these change data)', () => {
     await dlg().getByRole('button', { name: 'Confirm booking' }).click(); await p.waitForTimeout(1500);
     assert.equal(await p.locator('[role=dialog]').count(), 0);
     assert.equal((await find(name)).bookingStatus, 'Booked');
+    assert.equal((await find(name)).bookingDetails.bookingDate, '2026-10-01'); assert.equal((await find(name)).bookingDetails.salesExecutiveId, leadBefore.ownerId);
     const unit = (await call('/projects', { host: hostFor(DEMO), token: await adminToken() })).body.flatMap((x) => x.inventory).find((u) => u.id === unitId);
     assert.equal(unit.status, 'Booked', 'the chosen unit is no longer available');
   });
@@ -832,6 +851,42 @@ describe('Admin: honest screens and in-app dialogs', () => {
       if (!(await p.getByRole('button', { name: sub, exact: true }).first().isVisible())) await section(menu);
       await p.getByRole('button', { name: sub, exact: true }).first().click(); await p.waitForTimeout(400);
       assert.equal(await p.getByRole('button', { name: /delete/i }).count() + await p.locator('[title^="Delete"]').count(), 0, sub);
+    }
+  });
+  test('Inventory: a ground-floor type (SHOP on G) and flats on the other floors come from one generate', async () => {
+    const H = hostFor(DEMO); const tk = await adminToken();
+    const id = 'proj-ground-' + Date.now();
+    await call('/projects', { method: 'POST', host: H, token: tk, body: { id, name: 'Ground Test Heights', companyName: 'MultiSarv', location: 'Pune', reraNumber: 'P0000', projectType: 'Residential', projectStatus: 'Under Construction', description: '', totalFloors: 2, inventory: [], parkingInventory: [], paymentPlanIds: [] } });
+    try {
+      await p.reload(); await p.waitForTimeout(3500);
+      await p.getByTitle('Open Admin Settings Control Panel').click(); await p.waitForTimeout(600);
+      await section('Projects');
+      const allProjects = p.getByRole('button', { name: 'All projects', exact: true }).first();
+      if (await allProjects.isVisible()) await allProjects.click();
+      await p.getByLabel('Search projects').fill('Ground Test'); await p.waitForTimeout(300);
+      await p.locator('[role=button][aria-label^="Open "]').first().click(); await p.waitForTimeout(600);
+      await p.getByRole('button', { name: /Generate Inventory/ }).first().click(); await p.waitForTimeout(500);
+      await p.locator('#fromFloor').fill('0'); await p.locator('#toFloor').fill('2');
+      const rowsEl = p.getByLabel('Floors');
+      assert.equal(await rowsEl.count(), 1, 'every unit type has a Floors field');
+      // first row: flats on floors 1-2
+      await rowsEl.first().fill('1-2');
+      await p.getByRole('button', { name: '+ Add Unit Type' }).click(); await p.waitForTimeout(200);
+      const last = p.locator('div.relative').filter({ has: p.getByLabel('Remove unit configuration') }).last();
+      await last.locator('input[type=text]').nth(0).fill('SHOP');
+      const nums = last.locator('input[type=number]');
+      await nums.nth(0).fill('300'); await nums.nth(1).fill('360'); await nums.nth(2).fill('6500000'); await nums.nth(3).fill('0'); await nums.nth(4).fill('0'); await nums.nth(5).fill('2');
+      await last.getByLabel('Floors').fill('G');
+      await p.waitForTimeout(200);
+      assert.match(await p.getByRole('dialog').innerText().catch(() => p.locator('body').innerText()), /Units to Generate\s*\n?\s*10/, 'ground 2 shops + floors 1 and 2 with 4 flats each = 10');
+      await p.getByRole('button', { name: 'Generate Inventory', exact: true }).click(); await p.waitForTimeout(1500);
+      const proj = (await call('/projects/' + id, { host: H, token: tk })).body;
+      const onGround = proj.inventory.filter((u) => u.floor === 0), upper = proj.inventory.filter((u) => u.floor > 0);
+      assert.equal(onGround.length, 2); assert.ok(onGround.every((u) => u.type === 'SHOP' && /^G/.test(u.unitNumber)), 'ground floor holds only shops, numbered G…');
+      assert.equal(upper.length, 8); assert.ok(upper.every((u) => u.type === '2BHK'), 'upper floors hold only the flats');
+    } finally {
+      await call('/projects/' + id, { method: 'DELETE', host: H, token: tk });
+      await p.reload(); await p.waitForTimeout(3500); await p.getByTitle('Open Admin Settings Control Panel').click(); await p.waitForTimeout(600);
     }
   });
   test('Projects: list view with inventory progress, search, and a detail header', async () => {
